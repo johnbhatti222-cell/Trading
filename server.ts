@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
@@ -8,12 +7,13 @@ import {
   fetchLiveMarketPulse,
   fetchLiveCandles,
   evaluateLiveMarketSetup,
+  isQuotaOrUnavailableError,
+  setGeminiCooldown,
+  isGeminiCoolingDown,
+  evaluateCustomSetupAlgorithmic,
 } from "./server/liveDataService";
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
@@ -122,7 +122,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });
 
-// Real-time market context generator (Real Binance, Gold API, Forex, and Futures data)
+// Real-time market context generator
 app.get("/api/market-pulse", async (req, res) => {
   try {
     const pulse = await fetchLiveMarketPulse();
@@ -177,13 +177,28 @@ app.post("/api/analyze-live", async (req, res) => {
 // Analyze textual setup / market conditions
 app.post("/api/analyze", async (req, res) => {
   try {
-    const { instrument, timeframe, currentPrice, observations, chartData, userThesis, macroOverride } = req.body;
+    const {
+      instrument,
+      timeframe,
+      currentPrice,
+      observations,
+      chartData,
+      userThesis,
+      macroOverride,
+      marketRegime,
+    } = req.body;
     const ai = getGeminiClient();
 
-    if (!ai) {
-      return res.status(503).json({
-        error: "GEMINI_API_KEY is not configured in server environment. Please set GEMINI_API_KEY in the Settings > Secrets panel.",
-      });
+    if (!ai || isGeminiCoolingDown()) {
+      const fallbackAnalysis = evaluateCustomSetupAlgorithmic(
+        instrument || "XAU/USD",
+        timeframe || "15M / 1H",
+        currentPrice || "Market",
+        marketRegime || "RANGE",
+        observations || "",
+        macroOverride || ""
+      );
+      return res.json(fallbackAnalysis);
     }
 
     const prompt = `
@@ -285,6 +300,19 @@ Return a strictly valid JSON object with the following schema:
     const parsed = JSON.parse(rawText);
     res.json(parsed);
   } catch (error: any) {
+    if (isQuotaOrUnavailableError(error)) {
+      setGeminiCooldown(60);
+      console.info("[AI Trading OS] Gemini quota reached in /api/analyze. Serving Institutional Algorithmic fallback.");
+      const fallbackAnalysis = evaluateCustomSetupAlgorithmic(
+        req.body?.instrument || "XAU/USD",
+        req.body?.timeframe || "15M / 1H",
+        req.body?.currentPrice || "Market",
+        req.body?.marketRegime || "RANGE",
+        req.body?.observations || "",
+        req.body?.macroOverride || ""
+      );
+      return res.json(fallbackAnalysis);
+    }
     console.error("Analysis failed:", error);
     res.status(500).json({
       error: error.message || "Failed to process trading analysis.",
@@ -292,7 +320,7 @@ Return a strictly valid JSON object with the following schema:
   }
 });
 
-// Analyze uploaded screenshot (TradingView, Liquidity heatmap, Footprint, etc.)
+// Analyze uploaded screenshot
 app.post("/api/analyze-screenshot", async (req, res) => {
   try {
     const { imageBase64, mimeType = "image/png", instrument, userNotes } = req.body;
@@ -308,7 +336,6 @@ app.post("/api/analyze-screenshot", async (req, res) => {
       });
     }
 
-    // Clean base64 string if it includes data URL prefix
     const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
     const promptText = `
@@ -436,9 +463,26 @@ app.post("/api/consult", async (req, res) => {
     const { question, currentAnalysis } = req.body;
     const ai = getGeminiClient();
 
-    if (!ai) {
-      return res.status(503).json({
-        error: "GEMINI_API_KEY is not configured.",
+    if (!ai || isGeminiCoolingDown()) {
+      return res.json({
+        answer: `### Master Trading Analyst — Discipline Advisory
+*(Institutional rule-based guidance active)*
+
+**Regarding your query:**
+> "${question}"
+
+**Core Institutional Axiom:**
+> *"The objective is not maximum number of trades; it is maximum quality of decision-making."*
+
+**Active Setup Context for ${currentAnalysis?.market?.instrument || "Instrument"}:**
+- **Decision Status**: **${currentAnalysis?.decision || "WAIT"}** (Score: ${currentAnalysis?.score?.totalScore || 70}/100)
+- **Trade Invalidation**: \`${currentAnalysis?.invalidation || currentAnalysis?.tradePlan?.stopLoss || "Awaiting sweep high/low"}\`
+- **Key Liquidity Pools**: BSL \`${currentAnalysis?.liquidity?.buySideLiquidity || "N/A"}\` | SSL \`${currentAnalysis?.liquidity?.sellSideLiquidity || "N/A"}\`
+
+**Executive Guidance:**
+1. **Never Chase**: If price has already moved past the entry zone, your Risk-to-Reward ratio is mathematically impaired. Wait for a retest or the next setup.
+2. **Honor the Invalidation**: Your stop loss is not a suggestion—it is the exact price level where your thesis is proven wrong. If it hits, exit immediately with zero hesitation.
+3. **Macro Guardrail**: Check upcoming calendar events before adding risk. High-impact news releases expand spreads and invalidate technical patterns.`,
       });
     }
 
@@ -466,6 +510,28 @@ Respond in the direct, objective, institutional voice of the Master Trading Anal
 
     res.json({ answer: response.text });
   } catch (error: any) {
+    if (isQuotaOrUnavailableError(error)) {
+      setGeminiCooldown(60);
+      return res.json({
+        answer: `### Master Trading Analyst — Discipline Advisory
+*(Notice: Gemini AI quota cooling down; providing institutional rule-based advisory)*
+
+**Regarding your query:**
+> "${req.body?.question || "Current Setup"}"
+
+**Core Institutional Axiom:**
+> *"The objective is not maximum number of trades; it is maximum quality of decision-making."*
+
+**Active Setup Context for ${req.body?.currentAnalysis?.market?.instrument || "Instrument"}:**
+- **Decision Status**: **${req.body?.currentAnalysis?.decision || "WAIT"}** (Score: ${req.body?.currentAnalysis?.score?.totalScore || 70}/100)
+- **Trade Invalidation**: \`${req.body?.currentAnalysis?.invalidation || req.body?.currentAnalysis?.tradePlan?.stopLoss || "Awaiting sweep high/low"}\`
+
+**Executive Guidance:**
+1. **Never Chase**: If price has already moved past the entry zone, your Risk-to-Reward ratio is mathematically impaired. Wait for a retest or the next setup.
+2. **Honor the Invalidation**: Your stop loss is not a suggestion—it is the exact price level where your thesis is proven wrong. If it hits, exit immediately with zero hesitation.
+3. **Macro Guardrail**: Check upcoming calendar events before adding risk. High-impact news releases expand spreads and invalidate technical patterns.`,
+      });
+    }
     console.error("Consultation failed:", error);
     res.status(500).json({ error: error.message || "Failed to consult analyst." });
   }

@@ -7,11 +7,8 @@ import {
   fetchLiveMarketPulse,
   fetchLiveCandles,
   evaluateLiveMarketSetup,
-  isQuotaOrUnavailableError,
-  setGeminiCooldown,
-  isGeminiCoolingDown,
-  evaluateCustomSetupAlgorithmic,
 } from "./server/liveDataService";
+import { TradeAnalysis, DecisionType, MarketRegime } from "./src/types";
 
 dotenv.config();
 
@@ -20,6 +17,165 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+
+// In-memory Gemini quota management & backoff cooldown
+let geminiCooldownUntil = 0;
+
+function isQuotaOrUnavailableError(err: any): boolean {
+  if (!err) return false;
+  const str = String(err.message || err.toString?.() || "");
+  const status = err.status || err.error?.status;
+  const code = err.code || err.error?.code;
+  return (
+    code === 429 ||
+    code === 503 ||
+    status === "RESOURCE_EXHAUSTED" ||
+    status === "UNAVAILABLE" ||
+    str.includes("429") ||
+    str.includes("503") ||
+    str.includes("quota") ||
+    str.includes("Quota exceeded") ||
+    str.includes("RESOURCE_EXHAUSTED") ||
+    str.includes("UNAVAILABLE") ||
+    str.includes("high demand")
+  );
+}
+
+function setGeminiCooldown(seconds: number = 45) {
+  geminiCooldownUntil = Math.max(geminiCooldownUntil, Date.now() + seconds * 1000);
+}
+
+function isGeminiCoolingDown(): boolean {
+  return Date.now() < geminiCooldownUntil;
+}
+
+// Institutional algorithmic evaluation fallback for custom setups
+function evaluateCustomSetupAlgorithmic(
+  instrument: string = "XAU/USD",
+  timeframe: string = "15M",
+  currentPrice: string = "Market",
+  marketRegime: string = "RANGE",
+  observations: string = "",
+  macroOverride: string = ""
+): TradeAnalysis {
+  const text = (observations + " " + macroOverride).toLowerCase();
+  const hasSweep =
+    text.includes("sweep") ||
+    text.includes("raided") ||
+    text.includes("grabbed") ||
+    text.includes("taken out");
+  const hasBsl =
+    text.includes("bsl") || text.includes("buy-side") || text.includes("high") || text.includes("pdh");
+  const hasSsl =
+    text.includes("ssl") || text.includes("sell-side") || text.includes("low") || text.includes("pdl");
+  const hasDisplacement =
+    text.includes("displacement") ||
+    text.includes("choch") ||
+    text.includes("bos") ||
+    text.includes("break");
+  const hasFvg =
+    text.includes("fvg") ||
+    text.includes("fair value") ||
+    text.includes("imbalance") ||
+    text.includes("gap");
+  const isShort = (hasBsl && hasSweep) || text.includes("bearish") || text.includes("short");
+  const isLong = (hasSsl && hasSweep) || text.includes("bullish") || text.includes("long");
+
+  const direction: "LONG" | "SHORT" | "NONE" = isShort ? "SHORT" : isLong ? "LONG" : "NONE";
+  let totalScore = 65;
+  if (hasSweep) totalScore += 12;
+  if (hasDisplacement) totalScore += 10;
+  if (hasFvg) totalScore += 8;
+
+  const decision: DecisionType = totalScore >= 85 ? "TRADE" : totalScore >= 68 ? "WAIT" : "NO TRADE";
+
+  return {
+    id: `custom-algo-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    market: {
+      instrument,
+      currentPrice: currentPrice || "Market",
+      session: "Active",
+      marketRegime: marketRegime as MarketRegime,
+    },
+    bias: {
+      direction: direction === "SHORT" ? "BEARISH" : direction === "LONG" ? "BULLISH" : "NEUTRAL",
+      confidence: totalScore,
+    },
+    structure: {
+      higherTimeframe: `HTF trend aligns with ${marketRegime}. Price context: ${observations.slice(0, 120)}...`,
+      intermediate: `${timeframe}: Structural confirmation ${hasDisplacement ? "Confirmed with displacement" : "Pending confirmation"}.`,
+      lowerTimeframe: `Trigger timeframe: ${hasSweep ? "Liquidity sweep confirmed." : "Awaiting sweep."}`,
+    },
+    liquidity: {
+      buySideLiquidity: hasBsl ? "Identified above swing high / PDH" : "Upper range boundary",
+      sellSideLiquidity: hasSsl ? "Identified below swing low / PDL" : "Lower range boundary",
+      liquidityAlreadySwept: hasSweep ? "Recent swing high/low swept" : "None confirmed",
+      nextLikelyLiquidityTarget: isShort ? "Sell-side liquidity (SSL)" : "Buy-side liquidity (BSL)",
+    },
+    setup: {
+      setupType: hasSweep
+        ? `${direction} Liquidity Raid + Structural Reversal`
+        : "Range Compression / Watchlist",
+      whyExists: hasSweep
+        ? "Stop orders flushed into institutional liquidity."
+        : "Market is consolidating prior to directional expansion.",
+      confirmationRequired:
+        decision === "TRADE"
+          ? "Hold structural invalidation level without breach."
+          : "Wait for clean sweep and displacement.",
+    },
+    tradePlan: {
+      direction,
+      entryZone: currentPrice || "Market",
+      stopLoss: `Invalidation beyond the sweep wick`,
+      tp1: "Internal range liquidity (1:1.5R)",
+      tp2: "Opposite liquidity pool (1:2.5R)",
+      tp3: "HTF structural target (1:3.5R)",
+      riskReward: decision === "TRADE" ? "1:2.6" : "N/A",
+    },
+    score: {
+      htfStructure: hasSweep ? 17 : 12,
+      liquidityAlignment: hasSweep ? 18 : 11,
+      marketStructureConfirmation: hasDisplacement ? 13 : 8,
+      displacementMomentum: hasDisplacement ? 9 : 6,
+      volumeOrderFlow: hasFvg ? 8 : 6,
+      macroEnvironment: 8,
+      sessionTiming: 4,
+      riskReward: decision === "TRADE" ? 4 : 2,
+      regimeAlignment: 5,
+      totalScore,
+    },
+    decision,
+    decisionReason: hasSweep
+      ? `Institutional setup qualified: Liquidity sweep identified with structural shift. Score: ${totalScore}/100.`
+      : `Discipline advisory: Without confirmed liquidity sweep and displacement, entering now risks chasing equilibrium.`,
+    invalidation: "Beyond extreme of sweep candle wick",
+    keyRisk: "Upcoming macro news releases and potential range expansion outside regular trading hours.",
+    executionChecklist: {
+      thesisClear: decision === "TRADE",
+      liquidityIdentified: hasSweep,
+      confirmationPresent: hasDisplacement,
+      invalidationDefined: true,
+      acceptableRR: decision === "TRADE",
+      noImminentEventRisk: true,
+      notExtended: true,
+      noFomo: true,
+    },
+    masterPromptAnalysisMarkdown: `### Institutional Setup Analysis: ${instrument}
+- **Price**: \`${currentPrice}\`
+- **Regime**: ${marketRegime}
+- **Score**: **${totalScore}/100** | **Decision**: **${decision}**
+
+#### Key Observations:
+${observations}
+
+#### Institutional Plan:
+- **Direction**: ${direction}
+- **Invalidation**: Strict stop beyond swing wick.
+- **Guidance**: ${decision === "TRADE" ? "Execute according to plan. Do not move stop loss." : "Wait for structural confirmation before risking capital."}`,
+  };
+}
 
 // Lazy GoogleGenAI initialization helper
 function getGeminiClient(): GoogleGenAI | null {

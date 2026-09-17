@@ -1,0 +1,6 @@
+{
+  "name": "AI Trading OS — Master Trading Analyst",
+  "description": "Institutional multi-market trading analyst OS with multi-timeframe liquidity modeling, 100-point setup scoring, screenshot chart analysis, and post-trade learning.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

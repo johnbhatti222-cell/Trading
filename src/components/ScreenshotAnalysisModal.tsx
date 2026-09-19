@@ -270,6 +270,7 @@ export const ScreenshotAnalysisModal: React.FC<ScreenshotAnalysisModalProps> = (
                 <option value="EUR/USD">EUR/USD</option>
                 <option value="GBP/USD">GBP/USD</option>
                 <option value="USD/JPY">USD/JPY</option>
+                <option value="US30">US30 (Dow Jones 30)</option>
                 <option value="Auto-detect">Auto-detect from image</option>
               </select>
             </div>

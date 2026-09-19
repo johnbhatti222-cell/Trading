@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { JournalRecord, TradeAnalysis } from "../types";
 import {
   BookOpen,
@@ -14,6 +14,12 @@ import {
   AlertTriangle,
   Flame,
   ShieldCheck,
+  ShieldAlert,
+  Clock,
+  Lock,
+  Unlock,
+  Target,
+  Zap,
 } from "lucide-react";
 
 interface TradeJournalProps {
@@ -60,6 +66,66 @@ export const TradeJournal: React.FC<TradeJournalProps> = ({
     JournalRecord["executionQuality"]
   >("A+");
   const [newMistake, setNewMistake] = useState<JournalRecord["mistakeClassification"]>("None");
+  const [newSniperPrecision, setNewSniperPrecision] = useState<
+    JournalRecord["sniperPrecision"]
+  >("A+ Sniper (Within OTE)");
+
+  // Anti-Overtrading: Post-Trade 45-Minute Cool-Down Lockout
+  const [cooldownUntil, setCooldownUntil] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("ai_trading_os_cooldown_until");
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (parsed > Date.now()) return parsed;
+      }
+    } catch {}
+    return 0;
+  });
+  const [cooldownRemaining, setCooldownRemaining] = useState<string>("");
+
+  useEffect(() => {
+    if (!cooldownUntil || cooldownUntil <= Date.now()) {
+      setCooldownRemaining("");
+      return;
+    }
+
+    const updateCooldown = () => {
+      const remaining = Math.max(0, Math.floor((cooldownUntil - Date.now()) / 1000));
+      if (remaining <= 0) {
+        setCooldownRemaining("");
+        setCooldownUntil(0);
+        localStorage.removeItem("ai_trading_os_cooldown_until");
+      } else {
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        setCooldownRemaining(`${mins}:${String(secs).padStart(2, "0")}`);
+      }
+    };
+
+    updateCooldown();
+    const interval = setInterval(updateCooldown, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownUntil]);
+
+  const activateCooldown = (minutes = 45) => {
+    const until = Date.now() + minutes * 60 * 1000;
+    setCooldownUntil(until);
+    localStorage.setItem("ai_trading_os_cooldown_until", until.toString());
+  };
+
+  const clearCooldown = () => {
+    setCooldownUntil(0);
+    setCooldownRemaining("");
+    localStorage.removeItem("ai_trading_os_cooldown_until");
+  };
+
+  // Anti-Overtrading: Daily Shot Quota (3 Bullets max per day)
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const todayTrades = records.filter((r) => r.createdAt.startsWith(todayStr));
+  const dailyQuotaMax = 3;
+  const dailyShotsTaken = todayTrades.length;
+  const dailyShotsRemaining = Math.max(0, dailyQuotaMax - dailyShotsTaken);
+  const isDailyQuotaExhausted = dailyShotsTaken >= dailyQuotaMax;
 
   // Calculate Section 21 Analytics
   const totalTrades = records.length;
@@ -109,10 +175,17 @@ export const TradeJournal: React.FC<TradeJournalProps> = ({
       mae: Number(newResultR) <= 0 ? 1.0 : 0.3,
       executionQuality: newExecutionQuality,
       mistakeClassification: newMistake,
+      sniperPrecision: newSniperPrecision,
       aiThesis: activeAnalysis?.setup.whyExists || "Institutional setup logged.",
       status: "CLOSED",
     };
     onAddRecord(record);
+
+    // If stop hit / loss trade, trigger mandatory 45-minute cool-down lockout
+    if (Number(newResultR) <= 0) {
+      activateCooldown(45);
+    }
+
     setShowAddForm(false);
   };
 
@@ -182,6 +255,126 @@ export const TradeJournal: React.FC<TradeJournalProps> = ({
             <Plus size={13} />
             {showAddForm ? "Cancel Entry" : "Log Trade"}
           </button>
+        </div>
+      </div>
+
+      {/* Section: Anti-Overtrading Sniper Discipline Cockpit */}
+      <div className="bg-[#0b0e14] border border-slate-800/90 rounded-xl p-4 font-mono space-y-3 shadow-lg">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center">
+              <Target size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white tracking-wide">
+                  SNIPER DISCIPLINE & SHOT ALLOCATION ENGINE
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                  MAX 3 SHOTS / DAY
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Institutional snipers wait hours for one pristine entry. Overtrading destroys psychological edge.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Cooldown Triggers */}
+          <div className="flex items-center gap-2">
+            {cooldownRemaining ? (
+              <button
+                onClick={clearCooldown}
+                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] flex items-center gap-1.5 transition-colors"
+                title="Manual reset with trader acknowledgment"
+              >
+                <Unlock size={12} className="text-amber-400" />
+                <span>Override Lockout</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => activateCooldown(45)}
+                className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 text-[11px] flex items-center gap-1.5 transition-colors"
+              >
+                <ShieldAlert size={12} className="text-rose-400" />
+                <span>Voluntary 45m Lockout</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Shot Quota & Active Lockout Banner Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          {/* Daily Bullet Allocation */}
+          <div className={`p-3 rounded-lg border ${
+            isDailyQuotaExhausted
+              ? "bg-rose-950/40 border-rose-800 text-rose-200"
+              : "bg-slate-950 border-slate-800/80 text-slate-300"
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-slate-400">
+                DAILY SHOT QUOTA ({todayTrades.length}/3 FIRED TODAY):
+              </span>
+              <span className="text-[10px] font-bold text-slate-400">
+                {dailyShotsRemaining} Rounds Left
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {[1, 2, 3].map((shot) => {
+                const isFired = shot <= dailyShotsTaken;
+                return (
+                  <div
+                    key={shot}
+                    className={`flex-1 py-1.5 px-2 rounded flex items-center justify-center gap-1.5 border text-xs font-bold transition-all ${
+                      isFired
+                        ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                        : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    }`}
+                  >
+                    <Target size={12} className={isFired ? "text-rose-400" : "text-emerald-400"} />
+                    <span>Bullet {shot}: {isFired ? "EXPENDED" : "READY"}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {isDailyQuotaExhausted && (
+              <div className="mt-2 text-[10px] text-rose-300 font-bold flex items-center gap-1">
+                <Lock size={11} className="text-rose-400" />
+                <span>Daily execution limit reached. Capital preservation protocol engaged.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Post-Trade Cool-Down Status */}
+          <div className={`p-3 rounded-lg border flex flex-col justify-between ${
+            cooldownRemaining
+              ? "bg-amber-950/40 border-amber-500/60 text-amber-200"
+              : "bg-slate-950 border-slate-800/80 text-slate-400"
+          }`}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold">
+                POST-TRADE RESET LOCKOUT:
+              </span>
+              {cooldownRemaining && (
+                <span className="text-xs font-bold text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/50 flex items-center gap-1">
+                  <Clock size={11} className="animate-spin text-amber-400" />
+                  <span>{cooldownRemaining} Remaining</span>
+                </span>
+              )}
+            </div>
+
+            {cooldownRemaining ? (
+              <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                🔒 Amygdala Cool-Down Active. Stop loss triggers dopamine depletion; step away from charts to prevent revenge-trading.
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                ✓ System Clear. Mandatory 45-min lockout triggers automatically if a trade stops out.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -373,6 +566,20 @@ export const TradeJournal: React.FC<TradeJournalProps> = ({
                 <option value="Over-leveraged">Over-leveraged</option>
               </select>
             </div>
+
+            <div>
+              <label className="text-indigo-400 block mb-1 text-[11px] font-bold">Sniper Entry Precision:</label>
+              <select
+                value={newSniperPrecision}
+                onChange={(e) => setNewSniperPrecision(e.target.value as any)}
+                className="w-full bg-slate-950 border border-indigo-500/40 rounded-md p-2 text-indigo-200"
+              >
+                <option value="A+ Sniper (Within OTE)">🎯 A+ Sniper (Within OTE 62%–70.5%)</option>
+                <option value="Clean Retest (FVG Boundary)">⚡ Clean Retest (FVG Boundary)</option>
+                <option value="Chased (>0.5R Slippage)">⚠️ Chased (&gt;0.5R Slippage)</option>
+                <option value="Premature (No Sweep)">❌ Premature (No Sweep Confirmation)</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
@@ -408,6 +615,7 @@ export const TradeJournal: React.FC<TradeJournalProps> = ({
             <option value="BTC/USD">BTC/USD (Bitcoin)</option>
             <option value="EUR/USD">EUR/USD</option>
             <option value="USD/JPY">USD/JPY</option>
+            <option value="US30">US30 (Dow Jones)</option>
           </select>
 
           <select
@@ -513,6 +721,11 @@ export const TradeJournal: React.FC<TradeJournalProps> = ({
                     >
                       {r.executionQuality}
                     </span>
+                    {r.sniperPrecision && (
+                      <span className="block text-[10px] text-indigo-300 mt-0.5 font-sans">
+                        {r.sniperPrecision}
+                      </span>
+                    )}
                   </td>
                   <td className="p-3 whitespace-nowrap">
                     <span

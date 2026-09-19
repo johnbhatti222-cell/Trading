@@ -1,9 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { TradeAnalysis, MarketRegime } from "../types";
 import { PRESET_SCENARIOS } from "../data/mockScenarios";
 import { LiveChartVisualizer } from "./LiveChartVisualizer";
 import { ScoreGaugeBreakdown } from "./ScoreGaugeBreakdown";
 import { TradePlanCard } from "./TradePlanCard";
+import { SniperConfluenceRadar } from "./SniperConfluenceRadar";
+import { SniperPositionSizer } from "./SniperPositionSizer";
+import { MultiTimeframeAlignmentMatrix } from "./MultiTimeframeAlignmentMatrix";
+import { LiquidityProximityRadar } from "./LiquidityProximityRadar";
 import {
   Sparkles,
   Sliders,
@@ -28,6 +32,7 @@ interface SetupEvaluatorProps {
   onAnalysisChange: (analysis: TradeAnalysis) => void;
   onOpenConsult: () => void;
   onNavigateToChecklist: () => void;
+  onNavigateToReplay?: () => void;
 }
 
 const LIVE_INSTRUMENTS = [
@@ -36,6 +41,8 @@ const LIVE_INSTRUMENTS = [
   { symbol: "ETH/USD", name: "Ethereum Spot", icon: "Ξ", category: "CRYPTO" },
   { symbol: "SOL/USD", name: "Solana Spot", icon: "◎", category: "CRYPTO" },
   { symbol: "EUR/USD", name: "Euro / US Dollar", icon: "€", category: "FOREX" },
+  { symbol: "USD/JPY", name: "US Dollar / Yen", icon: "¥", category: "FOREX" },
+  { symbol: "US30", name: "Dow Jones 30", icon: "🏛️", category: "INDEX" },
 ];
 
 export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
@@ -43,6 +50,7 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
   onAnalysisChange,
   onOpenConsult,
   onNavigateToChecklist,
+  onNavigateToReplay,
 }) => {
   // Mode selection: "live" | "presets" | "custom"
   const [activeMode, setActiveMode] = useState<"live" | "presets" | "custom">("live");
@@ -69,6 +77,12 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
   );
   const [isCustomAuditing, setIsCustomAuditing] = useState(false);
   const [customAuditError, setCustomAuditError] = useState<string | null>(null);
+
+  // Scroll anchor for position sizer
+  const sizerRef = useRef<HTMLDivElement>(null);
+  const handleScrollToSizer = () => {
+    sizerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // Evaluate Live Market Function
   const handleEvaluateLiveMarket = async (symbolToAudit?: string, tfToAudit?: string) => {
@@ -246,7 +260,7 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
             <div className="flex items-center gap-2">
               <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
               <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
-                Active Live Markets (Binance & Spot Gold Feeds)
+                Active Live Markets (Institutional Feeds • Crypto, Gold, Forex & Indices)
               </h2>
             </div>
             <span className="text-[11px] font-mono text-slate-400">
@@ -254,7 +268,7 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
             {LIVE_INSTRUMENTS.map((inst) => {
               const isSelected = selectedInstrument === inst.symbol;
               return (
@@ -370,6 +384,7 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
                   <option value="EUR/USD">EUR/USD</option>
                   <option value="GBP/USD">GBP/USD</option>
                   <option value="USD/JPY">USD/JPY</option>
+                  <option value="US30">US30 (Dow Jones 30 Index)</option>
                 </select>
               </div>
 
@@ -492,9 +507,25 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
         </div>
       )}
 
+      {/* Section: Sniper Confluence Radar HUD (Binary 5-Gate Kill Box) */}
+      <SniperConfluenceRadar
+        analysis={currentAnalysis}
+        onOpenSizer={handleScrollToSizer}
+      />
+
+      {/* Section: Multi-Timeframe Fractal Alignment Matrix (1D -> 4H -> 15M -> 1M/5M) */}
+      <MultiTimeframeAlignmentMatrix
+        analysis={currentAnalysis}
+        selectedTimeframe={selectedTimeframe}
+        onSelectTimeframe={handleSelectTimeframe}
+      />
+
+      {/* Section: Sub-Pip Liquidity Proximity Radar & Pre-Sweep Sonar */}
+      <LiquidityProximityRadar analysis={currentAnalysis} />
+
       {/* Main Results Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Live Chart & Trade Plan Card (7 cols) */}
+        {/* Left Column: Live Chart, Trade Plan Card & Position Sizer (7 cols) */}
         <div className="lg:col-span-7 flex flex-col gap-6">
           <LiveChartVisualizer
             analysis={currentAnalysis}
@@ -502,6 +533,11 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
             onTimeframeChange={handleSelectTimeframe}
           />
           <TradePlanCard analysis={currentAnalysis} onOpenConsult={onOpenConsult} />
+
+          {/* Sub-Pip Precision Risk & Position Sizer */}
+          <div ref={sizerRef}>
+            <SniperPositionSizer analysis={currentAnalysis} />
+          </div>
         </div>
 
         {/* Right Column: 100-Point Score Gauge & Factor Breakdown (5 cols) */}
@@ -519,7 +555,7 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
               Pre-Flight Execution Gateway
             </h4>
             <p className="text-slate-400 text-xs leading-relaxed">
-              Before risking capital on this {currentAnalysis.market.instrument} setup, verify the 8 mandatory institutional pre-flight discipline gates.
+              Before risking capital on this {currentAnalysis.market.instrument} setup, verify the 8 mandatory institutional pre-flight discipline gates or backtest the trigger on the replay tape.
             </p>
             <button
               onClick={onNavigateToChecklist}
@@ -528,6 +564,16 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
               <span>Review Section 20 Pre-Flight Checklist</span>
               <ChevronRight size={14} />
             </button>
+
+            {onNavigateToReplay && (
+              <button
+                onClick={onNavigateToReplay}
+                className="w-full py-2.5 rounded-lg bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 font-semibold flex items-center justify-center gap-2 border border-sky-600/40 transition-colors"
+              >
+                <RotateCcw size={14} className="text-sky-400" />
+                <span>Simulate Setup on Tape Replay</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

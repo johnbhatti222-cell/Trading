@@ -6,14 +6,19 @@ import { SetupEvaluator } from "./components/SetupEvaluator";
 import { ExecutionChecklist } from "./components/ExecutionChecklist";
 import { TradeJournal } from "./components/TradeJournal";
 import { MacroCorrelationEngine } from "./components/MacroCorrelationEngine";
+import { InteractiveReplaySimulator } from "./components/InteractiveReplaySimulator";
 import { ConsultationModal } from "./components/ConsultationModal";
 import { ScreenshotAnalysisModal } from "./components/ScreenshotAnalysisModal";
+import { KillzoneClocksHUD } from "./components/KillzoneClocksHUD";
+import { MarketSentimentTicker } from "./components/MarketSentimentTicker";
+import { MultiInstrumentScannerModal } from "./components/MultiInstrumentScannerModal";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"evaluator" | "journal" | "checklist" | "macro">("evaluator");
+  const [activeTab, setActiveTab] = useState<"evaluator" | "journal" | "checklist" | "macro" | "replay">("evaluator");
   const [currentAnalysis, setCurrentAnalysis] = useState<TradeAnalysis>(DEFAULT_ANALYSIS_GOLD);
   const [isConsultOpen, setIsConsultOpen] = useState(false);
   const [isScreenshotModalOpen, setIsScreenshotModalOpen] = useState(false);
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
 
   // Persistent Trade Journal
   const [journalRecords, setJournalRecords] = useState<JournalRecord[]>(() => {
@@ -65,6 +70,25 @@ export default function App() {
     setActiveTab("evaluator");
   };
 
+  const handleSelectInstrumentFromRadar = async (symbol: string) => {
+    try {
+      const res = await fetch("/api/analyze-live", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, timeframe: "15M" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.score && data.market) {
+          setCurrentAnalysis(data);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to inspect instrument from radar:", err);
+    }
+    setActiveTab("evaluator");
+  };
+
   return (
     <div className="min-h-screen bg-[#070a0f] text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
       {/* Top Navigation & Live Tickers */}
@@ -72,7 +96,17 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenScreenshotModal={() => setIsScreenshotModalOpen(true)}
+        onOpenScannerModal={() => setIsScannerModalOpen(true)}
       />
+
+      {/* Real-Time Market Sentiment & Sector Correlation Ribbon */}
+      <MarketSentimentTicker
+        onNavigateToMacro={() => setActiveTab("macro")}
+        onOpenScanner={() => setIsScannerModalOpen(true)}
+      />
+
+      {/* Institutional Timing Clocks & Silver Bullet HUD */}
+      <KillzoneClocksHUD />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
@@ -82,6 +116,7 @@ export default function App() {
             onAnalysisChange={setCurrentAnalysis}
             onOpenConsult={() => setIsConsultOpen(true)}
             onNavigateToChecklist={() => setActiveTab("checklist")}
+            onNavigateToReplay={() => setActiveTab("replay")}
           />
         )}
 
@@ -105,6 +140,15 @@ export default function App() {
 
         {activeTab === "macro" && (
           <MacroCorrelationEngine />
+        )}
+
+        {activeTab === "replay" && (
+          <div className="space-y-6">
+            <InteractiveReplaySimulator
+              analysis={currentAnalysis}
+              onLogTradeToJournal={handleAddJournalRecord}
+            />
+          </div>
         )}
       </main>
 
@@ -131,6 +175,13 @@ export default function App() {
         isOpen={isScreenshotModalOpen}
         onClose={() => setIsScreenshotModalOpen(false)}
         onAnalysisComplete={handleScreenshotAnalysisComplete}
+      />
+
+      {/* Multi-Instrument Automated Alert Radar Modal */}
+      <MultiInstrumentScannerModal
+        isOpen={isScannerModalOpen}
+        onClose={() => setIsScannerModalOpen(false)}
+        onSelectInstrument={handleSelectInstrumentFromRadar}
       />
     </div>
   );

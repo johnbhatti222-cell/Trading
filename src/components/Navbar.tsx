@@ -13,18 +13,22 @@ import {
   ShieldCheck,
   Zap,
   RotateCw,
+  RotateCcw,
+  Radar,
 } from "lucide-react";
 
 interface NavbarProps {
-  activeTab: "evaluator" | "journal" | "checklist" | "macro";
-  setActiveTab: (tab: "evaluator" | "journal" | "checklist" | "macro") => void;
+  activeTab: "evaluator" | "journal" | "checklist" | "macro" | "replay";
+  setActiveTab: (tab: "evaluator" | "journal" | "checklist" | "macro" | "replay") => void;
   onOpenScreenshotModal: () => void;
+  onOpenScannerModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   onOpenScreenshotModal,
+  onOpenScannerModal,
 }) => {
   const [timeUtc, setTimeUtc] = useState("");
   const [tickers, setTickers] = useState<MarketTicker[]>(DEFAULT_TICKERS);
@@ -191,10 +195,37 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Globe size={13} />
             <span>Macro Matrix</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab("replay")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all ${
+              activeTab === "replay"
+                ? "bg-sky-600 text-white shadow-md"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            }`}
+          >
+            <RotateCcw size={13} />
+            <span>Tape Replay</span>
+          </button>
         </div>
 
-        {/* Screenshot Mode Action Trigger */}
+        {/* Action Triggers: Radar Scanner & Screenshot Mode */}
         <div className="flex items-center gap-2">
+          {onOpenScannerModal && (
+            <button
+              onClick={onOpenScannerModal}
+              title="Automated Multi-Instrument Radar (BTC/USD, US30, USD/JPY, XAU/USD)"
+              className="px-3 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-500/40 font-mono text-xs font-semibold flex items-center gap-2 transition-all shadow-sm group"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <Radar size={14} className="text-indigo-400 group-hover:rotate-45 transition-transform" />
+              <span>Radar Alerts (All Pairs)</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenScreenshotModal}
             className="px-3.5 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 font-mono text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"

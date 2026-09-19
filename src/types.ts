@@ -103,6 +103,7 @@ export interface JournalRecord {
   mae: number; // Max Adverse Excursion (R)
   executionQuality: "A+" | "Clean" | "Chased Entry" | "Premature Exit" | "Hesitated";
   mistakeClassification: "None" | "FOMO" | "Chased Price" | "Ignored Macro" | "Moved Stop" | "Over-leveraged";
+  sniperPrecision?: "A+ Sniper (Within OTE)" | "Clean Retest (FVG Boundary)" | "Chased (>0.5R Slippage)" | "Premature (No Sweep)";
   screenshot?: string;
   aiThesis: string;
   status: "OPEN" | "CLOSED" | "CANCELLED";
@@ -111,7 +112,7 @@ export interface JournalRecord {
 export interface MarketTicker {
   symbol: string;
   name: string;
-  category: "GOLD" | "CRYPTO" | "FOREX" | "MACRO";
+  category: "GOLD" | "CRYPTO" | "FOREX" | "MACRO" | "INDEX";
   price: string;
   change24h: string;
   bias: "BULLISH" | "BEARISH" | "NEUTRAL";
@@ -157,6 +158,53 @@ export interface LiveMarketPulse {
     impact: "LOW" | "MEDIUM" | "HIGH" | "EXTREME";
     warning: string;
   }[];
+  sentiment?: MarketSentimentData;
+}
+
+export interface InstrumentSentiment {
+  symbol: string; // "BTC/USD" | "USD/JPY" | "US30" | "XAU/USD"
+  name: string;
+  score: number; // 0 - 100
+  classification: "EXTREME_FEAR" | "FEAR" | "NEUTRAL" | "GREED" | "EXTREME_GREED";
+  label: string; // e.g. "Greed (71/100)"
+  signal: "RISK_ON" | "RISK_OFF" | "NEUTRAL" | "HEDGE_ACCUMULATION";
+  summary: string;
+  primaryMetric: {
+    label: string;
+    value: string;
+    source: string;
+  };
+  change24h?: string;
+  historicalScores?: { date: string; score: number }[];
+}
+
+export interface SectorCorrelationItem {
+  id: string;
+  pair: string; // e.g. "BTC/USD vs US30"
+  coefficient: number; // -1.00 to +1.00
+  regime: "STRONG_POSITIVE" | "MODERATE_POSITIVE" | "UNCORRELATED" | "MODERATE_NEGATIVE" | "STRONG_INVERSE";
+  interpretation: string;
+  flowDriver: string;
+}
+
+export interface MarketSentimentData {
+  timestamp: string;
+  overallRegime: "RISK_ON" | "RISK_OFF" | "SELECTIVE_ROTATION" | "NEUTRAL";
+  globalFearGreedScore: number;
+  globalFearGreedLabel: string;
+  instruments: {
+    btc: InstrumentSentiment;
+    us30: InstrumentSentiment;
+    usdJpy: InstrumentSentiment;
+    xau: InstrumentSentiment;
+  };
+  correlations: SectorCorrelationItem[];
+  apiSources: {
+    crypto: string;
+    equities: string;
+    forex: string;
+    gold: string;
+  };
 }
 
 export interface LiveCandlesResponse {
@@ -179,4 +227,57 @@ export interface LiveCandlesResponse {
   }[];
   candles: LiveCandle[];
 }
+
+export interface ScannerConfig {
+  enabled: boolean;
+  thresholdScore: number;
+  instruments: string[];
+  telegramEnabled: boolean;
+  botToken?: string;
+  chatId?: string;
+  cooldownMinutes: number;
+  soundEnabled: boolean;
+}
+
+export interface DetectedAlert {
+  id: string;
+  timestamp: string;
+  instrument: string;
+  score: number;
+  direction: "BULLISH" | "BEARISH" | "NEUTRAL";
+  decision: "TRADE" | "WAIT";
+  currentPrice: string;
+  entry: string;
+  stopLoss: string;
+  tp1: string;
+  tp2?: string;
+  riskReward: string;
+  reason: string;
+  session: string;
+  telegramSent: boolean;
+  telegramError?: string;
+  analysis?: TradeAnalysis;
+}
+
+export interface ScannerStatus {
+  isRunning: boolean;
+  config: ScannerConfig;
+  lastScanTime: string | null;
+  nextScanTime: string | null;
+  activeInstrumentCount: number;
+  recentAlerts: DetectedAlert[];
+  latestEvaluations: Record<
+    string,
+    {
+      instrument: string;
+      score: number;
+      decision: string;
+      direction: string;
+      currentPrice: string;
+      lastUpdated: string;
+      recentSweep?: string;
+    }
+  >;
+}
+
 

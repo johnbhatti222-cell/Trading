@@ -1,1 +1,1 @@
-https://ai-trading-os-jeds.onrender.com
+https://ai-trading-os-jeds.onrender.com/

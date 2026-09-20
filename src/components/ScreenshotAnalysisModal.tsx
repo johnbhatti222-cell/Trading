@@ -149,20 +149,20 @@ export const ScreenshotAnalysisModal: React.FC<ScreenshotAnalysisModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
       <div className="bg-[#0f141c] border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center flex-shrink-0">
               <Camera className="w-5 h-5 text-sky-400" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="text-sm font-mono font-bold text-white flex items-center gap-2">
-                Screenshot Analysis Mode (Section 19)
+                Screenshot Analysis (Section 19)
               </h3>
-              <p className="text-xs text-slate-400 font-mono">
-                Multimodal TradingView / Heatmap / Footprint institutional audit
+              <p className="text-[11px] sm:text-xs text-slate-400 font-mono truncate sm:whitespace-normal">
+                Multimodal TradingView / Heatmap / Footprint audit
               </p>
             </div>
           </div>
@@ -175,7 +175,7 @@ export const ScreenshotAnalysisModal: React.FC<ScreenshotAnalysisModalProps> = (
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-4 font-mono text-xs flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 font-mono text-xs flex-1">
           {/* Dropzone */}
           <div
             onDragEnter={handleDrag}

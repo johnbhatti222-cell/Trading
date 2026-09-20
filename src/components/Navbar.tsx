@@ -74,17 +74,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="border-b border-slate-800 bg-[#090d14] sticky top-0 z-40">
       {/* Top Bar with Live Institutional Tickers */}
-      <div className="px-4 py-1.5 bg-[#06090e] border-b border-slate-800/80 flex items-center justify-between gap-4 overflow-x-auto text-[11px] font-mono no-scrollbar">
-        <div className="flex items-center gap-4">
+      <div className="px-3 sm:px-4 py-1.5 bg-[#06090e] border-b border-slate-800/80 flex items-center justify-between gap-3 sm:gap-4 overflow-x-auto text-[11px] font-mono no-scrollbar touch-pan-x">
+        <div className="flex items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-1.5 text-emerald-400 font-semibold uppercase tracking-wider flex-shrink-0">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span>{isLive ? "LIVE DATA FEED:" : "MARKET FEED:"}</span>
+            <span>{isLive ? "LIVE FEED:" : "FEED:"}</span>
           </div>
 
-          <div className="flex items-center gap-4 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {tickers.map((t) => {
               const isPositive = t.change24h.startsWith("+");
               return (
@@ -109,7 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 text-slate-400 flex-shrink-0 text-[10px]">
+        <div className="flex items-center gap-2 sm:gap-3 text-slate-400 flex-shrink-0 text-[10px]">
           <button
             onClick={fetchTickers}
             disabled={isRefreshing}
@@ -119,38 +119,60 @@ export const Navbar: React.FC<NavbarProps> = ({
             <RotateCw size={11} className={isRefreshing ? "animate-spin text-sky-400" : ""} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
-          <span className="text-slate-700">•</span>
-          <span className="text-slate-300 font-semibold">{timeUtc || "Loading UTC..."}</span>
+          <span className="text-slate-700 hidden sm:inline">•</span>
+          <span className="text-slate-300 font-semibold whitespace-nowrap">{timeUtc || "Loading UTC..."}</span>
         </div>
       </div>
 
       {/* Main Header with Branding and Nav Tabs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
         {/* Brand */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-sky-600 flex items-center justify-center text-white shadow-lg shadow-indigo-950/50">
-            <Activity size={20} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold font-mono tracking-tight text-white">
-                AI TRADING OS
-              </h1>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-                MASTER ANALYST
-              </span>
+        <div className="flex items-center justify-between md:justify-start gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-sky-600 flex items-center justify-center text-white shadow-lg shadow-indigo-950/50 flex-shrink-0">
+              <Activity size={18} />
             </div>
-            <p className="text-[11px] text-slate-400 font-mono">
-              Institutional Multi-Market Structure • Liquidity • 100-Pt AI Score
-            </p>
+            <div>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h1 className="text-sm sm:text-base font-bold font-mono tracking-tight text-white">
+                  AI TRADING OS
+                </h1>
+                <span className="px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                  MASTER ANALYST
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-[11px] text-slate-400 font-mono hidden sm:block">
+                Institutional Multi-Market Structure • Liquidity • 100-Pt AI Score
+              </p>
+            </div>
+          </div>
+
+          {/* Mobile-only action shortcut triggers */}
+          <div className="flex items-center gap-1.5 md:hidden">
+            {onOpenScannerModal && (
+              <button
+                onClick={onOpenScannerModal}
+                title="Radar Alerts"
+                className="p-1.5 rounded-lg bg-indigo-950/70 text-indigo-300 border border-indigo-500/40 font-mono text-xs"
+              >
+                <Radar size={14} className="text-indigo-400" />
+              </button>
+            )}
+            <button
+              onClick={onOpenScreenshotModal}
+              title="Upload Chart"
+              className="p-1.5 rounded-lg bg-sky-600/20 text-sky-300 border border-sky-500/40 font-mono text-xs"
+            >
+              <Camera size={14} className="text-sky-400" />
+            </button>
           </div>
         </div>
 
-        {/* View Switcher Tabs */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+        {/* View Switcher Tabs (Horizontally scrollable on mobile/tablet) */}
+        <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800 overflow-x-auto no-scrollbar max-w-full touch-pan-x">
           <button
             onClick={() => setActiveTab("evaluator")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === "evaluator"
                 ? "bg-indigo-600 text-white shadow-md"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
@@ -162,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setActiveTab("checklist")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === "checklist"
                 ? "bg-indigo-600 text-white shadow-md"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
@@ -174,7 +196,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setActiveTab("journal")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === "journal"
                 ? "bg-indigo-600 text-white shadow-md"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
@@ -186,7 +208,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setActiveTab("macro")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === "macro"
                 ? "bg-indigo-600 text-white shadow-md"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
@@ -198,7 +220,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setActiveTab("replay")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === "replay"
                 ? "bg-sky-600 text-white shadow-md"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
@@ -209,8 +231,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Action Triggers: Radar Scanner & Screenshot Mode */}
-        <div className="flex items-center gap-2">
+        {/* Action Triggers: Radar Scanner & Screenshot Mode (Desktop/Tablet) */}
+        <div className="hidden md:flex items-center gap-2 flex-shrink-0">
           {onOpenScannerModal && (
             <button
               onClick={onOpenScannerModal}
@@ -222,16 +244,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
               <Radar size={14} className="text-indigo-400 group-hover:rotate-45 transition-transform" />
-              <span>Radar Alerts (All Pairs)</span>
+              <span>Radar Alerts</span>
             </button>
           )}
 
           <button
             onClick={onOpenScreenshotModal}
-            className="px-3.5 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 font-mono text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+            className="px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 font-mono text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
           >
             <Camera size={14} className="text-sky-400" />
-            <span>Upload Chart (Sec 19)</span>
+            <span>Upload Chart</span>
           </button>
         </div>
       </div>

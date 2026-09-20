@@ -186,27 +186,27 @@ export const LiquidityProximityRadar: React.FC<LiquidityProximityRadarProps> = (
     <div className="bg-[#0b0e14] border border-slate-800 rounded-xl p-4 font-mono shadow-xl">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-800/80">
-        <div className="flex items-center gap-2.5">
-          <div className="relative flex items-center justify-center w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/40 text-sky-400">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="relative flex items-center justify-center w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/40 text-sky-400 flex-shrink-0">
             <Radio size={16} className="animate-pulse" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="text-xs font-bold text-white tracking-wider">
-                SUB-PIP LIQUIDITY PROXIMITY RADAR & PRE-SWEEP SONAR
+                LIQUIDITY PROXIMITY RADAR & PRE-SWEEP SONAR
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-950/60 text-sky-300 border border-sky-500/40">
                 ACTIVE MONITOR
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate sm:whitespace-normal">
               Live distance tracking to key institutional liquidity pools (PDH/PDL & FVG CE).
             </p>
           </div>
         </div>
 
         {/* Audio Toggle & Test Ping */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => playSonarPing(880)}
             className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold border border-slate-700 transition-colors"
@@ -234,7 +234,7 @@ export const LiquidityProximityRadar: React.FC<LiquidityProximityRadarProps> = (
           return (
             <div
               key={lvl.id}
-              className={`p-3 rounded-lg border transition-all flex flex-col justify-between ${
+              className={`p-3 rounded-lg border transition-all flex flex-col justify-between min-w-0 ${
                 lvl.isKillZone
                   ? "bg-rose-950/40 border-rose-500/80 shadow-md ring-1 ring-rose-500/40 animate-pulse"
                   : lvl.isApproaching

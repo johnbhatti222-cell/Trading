@@ -90,23 +90,23 @@ Ask me anything about this thesis:
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
       <div className="bg-[#0f141c] border border-slate-700 rounded-2xl w-full max-w-2xl h-[620px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center">
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center flex-shrink-0">
               <Bot className="w-4 h-4 text-indigo-400" />
             </div>
-            <div>
-              <h3 className="text-sm font-mono font-bold text-white flex items-center gap-2">
+            <div className="min-w-0">
+              <h3 className="text-sm font-mono font-bold text-white flex flex-wrap items-center gap-1.5 sm:gap-2">
                 Challenge Master Analyst
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
                   {analysis.market.instrument}
                 </span>
               </h3>
-              <p className="text-xs text-slate-400 font-mono">
-                Objective, institutional risk interrogation & discipline check
+              <p className="text-[11px] sm:text-xs text-slate-400 font-mono truncate sm:whitespace-normal">
+                Objective risk interrogation & discipline check
               </p>
             </div>
           </div>

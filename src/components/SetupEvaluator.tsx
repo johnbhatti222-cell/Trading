@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { TradeAnalysis, MarketRegime } from "../types";
 import { PRESET_SCENARIOS } from "../data/mockScenarios";
 import { LiveChartVisualizer } from "./LiveChartVisualizer";
 import { ScoreGaugeBreakdown } from "./ScoreGaugeBreakdown";
 import { TradePlanCard } from "./TradePlanCard";
 import { SniperConfluenceRadar } from "./SniperConfluenceRadar";
-import { SniperPositionSizer } from "./SniperPositionSizer";
 import { MultiTimeframeAlignmentMatrix } from "./MultiTimeframeAlignmentMatrix";
 import { LiquidityProximityRadar } from "./LiquidityProximityRadar";
 import {
@@ -77,12 +76,6 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
   );
   const [isCustomAuditing, setIsCustomAuditing] = useState(false);
   const [customAuditError, setCustomAuditError] = useState<string | null>(null);
-
-  // Scroll anchor for position sizer
-  const sizerRef = useRef<HTMLDivElement>(null);
-  const handleScrollToSizer = () => {
-    sizerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
 
   // Evaluate Live Market Function
   const handleEvaluateLiveMarket = async (symbolToAudit?: string, tfToAudit?: string) => {
@@ -181,11 +174,11 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
     <div className="flex flex-col gap-6">
       {/* Top Evaluation Mode Switcher */}
       <div className="bg-[#0f141c] border border-slate-800 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-mono text-slate-400 font-bold uppercase tracking-wider">
             Analysis Source:
           </span>
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <div className="flex flex-wrap items-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1">
             <button
               onClick={() => {
                 setActiveMode("live");
@@ -510,7 +503,6 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
       {/* Section: Sniper Confluence Radar HUD (Binary 5-Gate Kill Box) */}
       <SniperConfluenceRadar
         analysis={currentAnalysis}
-        onOpenSizer={handleScrollToSizer}
       />
 
       {/* Section: Multi-Timeframe Fractal Alignment Matrix (1D -> 4H -> 15M -> 1M/5M) */}
@@ -524,24 +516,19 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
       <LiquidityProximityRadar analysis={currentAnalysis} />
 
       {/* Main Results Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Live Chart, Trade Plan Card & Position Sizer (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start w-full">
+        {/* Left Column: Live Chart & Trade Plan Card (7 cols on desktop, full width on mobile/tablet) */}
+        <div className="lg:col-span-7 flex flex-col gap-6 w-full min-w-0">
           <LiveChartVisualizer
             analysis={currentAnalysis}
             selectedTimeframe={selectedTimeframe}
             onTimeframeChange={handleSelectTimeframe}
           />
           <TradePlanCard analysis={currentAnalysis} onOpenConsult={onOpenConsult} />
-
-          {/* Sub-Pip Precision Risk & Position Sizer */}
-          <div ref={sizerRef}>
-            <SniperPositionSizer analysis={currentAnalysis} />
-          </div>
         </div>
 
-        {/* Right Column: 100-Point Score Gauge & Factor Breakdown (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
+        {/* Right Column: 100-Point Score Gauge & Factor Breakdown (5 cols on desktop, full width on mobile/tablet) */}
+        <div className="lg:col-span-5 flex flex-col gap-6 w-full min-w-0">
           <ScoreGaugeBreakdown
             score={currentAnalysis.score}
             decision={currentAnalysis.decision}

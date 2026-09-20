@@ -81,6 +81,10 @@ export interface TradeAnalysis {
     unreadableOrMissingElements: string;
     manipulationFlags: string;
   };
+  rsi?: {
+    value: number;
+    condition: string;
+  };
   masterPromptAnalysisMarkdown?: string;
 }
 
@@ -220,6 +224,10 @@ export interface LiveCandlesResponse {
   ssl: number;
   recentSweep: "BSL_SWEPT" | "SSL_SWEPT" | "NONE";
   sweepDetail?: string;
+  rsi?: {
+    value: number;
+    condition: string;
+  };
   activeFvgs: {
     type: "BULLISH" | "BEARISH";
     top: number;
@@ -254,6 +262,11 @@ export interface DetectedAlert {
   riskReward: string;
   reason: string;
   session: string;
+  rsi?: {
+    value: number;
+    condition: string;
+  };
+  isMarketOpen?: boolean;
   telegramSent: boolean;
   telegramError?: string;
   analysis?: TradeAnalysis;
@@ -276,6 +289,12 @@ export interface ScannerStatus {
       currentPrice: string;
       lastUpdated: string;
       recentSweep?: string;
+      rsi?: {
+        value: number;
+        condition: string;
+      };
+      isMarketOpen?: boolean;
+      marketStatusText?: string;
     }
   >;
 }

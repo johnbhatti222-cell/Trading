@@ -50,10 +50,10 @@ KEY RISK: ${analysis.keyRisk}
   };
 
   return (
-    <div className="bg-[#0f141c] border border-slate-800 rounded-xl p-5 shadow-xl flex flex-col gap-5">
+    <div className="bg-[#0f141c] border border-slate-800 rounded-xl p-4 sm:p-5 shadow-xl flex flex-col gap-4 sm:gap-5">
       {/* Header with Bias & Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
           <div
             className={`px-3 py-1 rounded-md font-mono font-bold text-xs flex items-center gap-1.5 ${
               analysis.bias.direction === "BULLISH"
@@ -74,7 +74,7 @@ KEY RISK: ${analysis.keyRisk}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {onOpenConsult && (
             <button
               onClick={onOpenConsult}
@@ -238,9 +238,9 @@ KEY RISK: ${analysis.keyRisk}
       {/* Critical Invalidation & Key Risk Sections */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Invalidation Alert */}
-        <div className="bg-rose-950/20 border border-rose-900/40 rounded-lg p-3.5 flex items-start gap-3">
+        <div className="bg-rose-950/20 border border-rose-900/40 rounded-lg p-3.5 flex items-start gap-3 min-w-0">
           <AlertOctagon className="w-5 h-5 text-rose-400 mt-0.5 flex-shrink-0" />
-          <div>
+          <div className="min-w-0">
             <h5 className="text-xs font-mono font-bold text-rose-400 uppercase tracking-wide">
               Thesis Invalidation Level
             </h5>
@@ -251,9 +251,9 @@ KEY RISK: ${analysis.keyRisk}
         </div>
 
         {/* Key Risk Alert */}
-        <div className="bg-amber-950/20 border border-amber-900/40 rounded-lg p-3.5 flex items-start gap-3">
+        <div className="bg-amber-950/20 border border-amber-900/40 rounded-lg p-3.5 flex items-start gap-3 min-w-0">
           <Shield className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
-          <div>
+          <div className="min-w-0">
             <h5 className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wide">
               Primary Hazard / Event Risk
             </h5>

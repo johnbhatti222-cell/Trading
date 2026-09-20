@@ -136,10 +136,10 @@ export const KillzoneClocksHUD: React.FC = () => {
   }, []);
 
   return (
-    <div className="bg-[#080c14] border-b border-slate-800/80 px-4 py-2 font-mono text-xs">
-      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+    <div className="bg-[#080c14] border-b border-slate-800/80 px-3 sm:px-4 py-2 font-mono text-xs">
+      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
         {/* Left: Active Killzone Banner with Pulse */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">
               {activeSession ? (
@@ -151,35 +151,35 @@ export const KillzoneClocksHUD: React.FC = () => {
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
               )}
             </span>
-            <span className="text-slate-400 font-bold uppercase tracking-wider text-[11px]">
-              {activeSession ? "ACTIVE KILLZONE:" : "OFF-PEAK SESSION:"}
+            <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] sm:text-[11px]">
+              {activeSession ? "ACTIVE KILLZONE:" : "OFF-PEAK:"}
             </span>
           </div>
 
           {activeSession ? (
             <div className="flex items-center gap-2">
-              <span className="text-emerald-300 font-bold text-xs bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1.5">
+              <span className="text-emerald-300 font-bold text-[11px] sm:text-xs bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/50 flex items-center gap-1.5">
                 <Zap size={12} className="fill-current text-emerald-400" />
                 <span>{activeSession.name}</span>
               </span>
-              <span className="text-slate-400 text-[11px] hidden md:inline">
+              <span className="text-slate-400 text-[10px] sm:text-[11px]">
                 Closes in: <strong className="text-white font-mono">{countdownStr}</strong>
               </span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-[11px]">
+            <div className="flex items-center gap-2 text-[10px] sm:text-[11px]">
               <span className="text-amber-300 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/40 font-semibold">
-                Asian Accumulation / Consolidation
+                Asian Accumulation
               </span>
-              <span className="text-slate-400 hidden sm:inline">
-                Next ({nextSessionName}) in: <strong className="text-white font-mono">{countdownStr}</strong>
+              <span className="text-slate-400">
+                Next: <strong className="text-white font-mono">{countdownStr}</strong>
               </span>
             </div>
           )}
         </div>
 
         {/* Right: Institutional Killzone Windows */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar text-[10px]">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar touch-pan-x text-[10px] max-w-full">
           {INSTITUTIONAL_SESSIONS.map((s) => {
             const isCurrent = activeSession?.id === s.id;
             return (

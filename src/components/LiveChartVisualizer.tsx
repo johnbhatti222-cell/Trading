@@ -545,7 +545,7 @@ export const LiveChartVisualizer: React.FC<LiveChartVisualizerProps> = ({
       )}
 
       {/* SVG Stage */}
-      <div className="relative p-2 overflow-x-auto bg-[#0b0e14] no-scrollbar">
+      <div className="relative p-1.5 sm:p-2 overflow-x-auto bg-[#0b0e14] no-scrollbar touch-pan-x">
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className="w-full h-auto min-w-[760px] select-none"
@@ -954,9 +954,9 @@ export const LiveChartVisualizer: React.FC<LiveChartVisualizerProps> = ({
 
       {/* RSI Sub-Chart Oscillator Panel (ICT Momentum & Liquidity Exhaustion) */}
       {showRsi && (
-        <div className="border-t border-slate-800 bg-[#090d14] px-4 py-2.5">
-          <div className="flex items-center justify-between gap-2 mb-1.5 font-mono text-xs">
-            <div className="flex items-center gap-2">
+        <div className="border-t border-slate-800 bg-[#090d14] px-3 sm:px-4 py-2 sm:py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5 font-mono text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-slate-400 font-semibold flex items-center gap-1.5">
                 <Activity size={13} className="text-indigo-400" />
                 <span>RSI({rsiPeriod}) Wilders Smoothing</span>
@@ -974,7 +974,7 @@ export const LiveChartVisualizer: React.FC<LiveChartVisualizerProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center gap-3 text-[11px] text-slate-400">
+            <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-slate-400 flex-wrap">
               <span className="flex items-center gap-1">
                 <span className="inline-block w-2 h-0.5 bg-rose-400"></span>
                 <span>OB: 70</span>
@@ -991,10 +991,10 @@ export const LiveChartVisualizer: React.FC<LiveChartVisualizerProps> = ({
           </div>
 
           {/* RSI SVG Curve */}
-          <div className="relative overflow-hidden rounded bg-[#06080d] border border-slate-800/80 p-1">
+          <div className="relative overflow-x-auto no-scrollbar touch-pan-x rounded bg-[#06080d] border border-slate-800/80 p-1">
             <svg
               viewBox={`0 0 ${width} 90`}
-              className="w-full h-[78px] select-none"
+              className="w-full h-[78px] min-w-[760px] select-none"
               style={{ fontFamily: "'JetBrains Mono', monospace" }}
             >
               {/* Overbought Band (70 - 100) */}

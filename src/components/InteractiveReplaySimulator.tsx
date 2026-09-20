@@ -961,8 +961,8 @@ export const InteractiveReplaySimulator: React.FC<InteractiveReplaySimulatorProp
 
           {/* Transport Controls (Timeline Scrubber) */}
           <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   onClick={() => {
                     setIsPlaying(false);
@@ -1018,7 +1018,7 @@ export const InteractiveReplaySimulator: React.FC<InteractiveReplaySimulatorProp
 
               <div>
                 <span className="text-slate-400 text-[11px]">
-                  Scrub timeline to hide or reveal candles:
+                  Scrub timeline:
                 </span>
               </div>
             </div>

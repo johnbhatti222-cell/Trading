@@ -490,6 +490,9 @@ export const SniperPositionSizer: React.FC<SniperPositionSizerProps> = ({
               riskPercent,
               rMultiple: calculations.tp1Metrics.rMultiple,
               includeSizing: includeSizingInAlerts,
+              score: analysis.score?.totalScore,
+              thesis: analysis.decisionReason,
+              rsi: analysis.rsi,
             },
           }),
         });

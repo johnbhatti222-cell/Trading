@@ -110,7 +110,7 @@ export const MacroCorrelationEngine: React.FC = () => {
   }, []);
 
   return (
-    <div className="bg-[#0f141c] border border-slate-800 rounded-xl p-5 shadow-xl flex flex-col gap-5">
+    <div className="bg-[#0f141c] border border-slate-800 rounded-xl p-4 sm:p-5 shadow-xl flex flex-col gap-4 sm:gap-5">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
         <div>

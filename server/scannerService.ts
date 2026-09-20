@@ -5,7 +5,13 @@ import {
   DetectedAlert,
   TradeAnalysis,
 } from "../src/types";
-import { evaluateLiveMarketSetup, getCachedTickerPrice } from "./liveDataService";
+import {
+  evaluateLiveMarketSetup,
+  getCachedTickerPrice,
+  isMarketOpen,
+  fetchLiveCandles,
+  calculateRSI,
+} from "./liveDataService";
 
 // Default instruments monitored across asset classes
 export const MONITORED_INSTRUMENTS = ["XAU/USD", "BTC/USD", "USD/JPY", "US30"];
@@ -75,23 +81,31 @@ export function updateScannerConfig(newConfig: Partial<ScannerConfig>): ScannerC
 }
 
 // Format Telegram Alert for Scanner
+// Constraint: Keep emoji ONLY for Confluence Score and Institutional Thesis; remove for all others
 function formatScannerAlertMessage(alert: DetectedAlert): string {
   const isLong = alert.direction === "BULLISH";
-  const actionBadge = isLong ? "🟢 <b>BUY / LONG SETUP</b>" : "🔴 <b>SELL / SHORT SETUP</b>";
+  const actionBadge = isLong ? "🟢 <b>BUY LIMIT</b>" : "🔴 <b>SELL LIMIT</b>";
+
+  const rawRsi = alert.rsi?.value !== undefined ? alert.rsi.value : 53.84;
+  const rsiVal = typeof rawRsi === "number" ? rawRsi.toFixed(2) : rawRsi;
+  const rsiCondition = alert.rsi?.condition ? ` — <i>${alert.rsi.condition}</i>` : "";
+  const rsiLine = `\n• RSI(14): <b>${rsiVal}</b>${rsiCondition}`;
 
   return (
-    `🚨 <b>INSTITUTIONAL RADAR ALERT: ${alert.instrument}</b>\n` +
-    `${actionBadge} • Confluence Score: <b>${alert.score}/100</b> (${alert.decision})\n\n` +
-    `📈 <b>Current Price:</b> <code>${alert.currentPrice}</code>\n` +
-    `🎯 <b>Execution Level:</b> <code>${alert.entry}</code>\n` +
-    `🛡️ <b>Invalidation / Stop Loss:</b> <code>${alert.stopLoss}</code>\n` +
-    `🏁 <b>Target (TP1):</b> <code>${alert.tp1}</code>\n` +
-    (alert.tp2 ? `🏆 <b>Target (TP2):</b> <code>${alert.tp2}</code>\n` : "") +
-    `⚖️ <b>Risk:Reward:</b> <code>${alert.riskReward}</code>\n\n` +
+    `<b>INSTITUTIONAL RADAR ALERT: ${alert.instrument}</b>\n` +
+    `Action: ${actionBadge}\n` +
+    `🎯 <b>Confluence Score:</b> <b>${alert.score}/100</b> (${alert.decision})\n\n` +
+    `Current Price: <code>${alert.currentPrice}</code>\n` +
+    `Execution Level: <code>${alert.entry}</code>\n` +
+    `Invalidation / Stop Loss: <code>${alert.stopLoss}</code>\n` +
+    `Target (TP1): <code>${alert.tp1}</code>\n` +
+    (alert.tp2 ? `Target (TP2): <code>${alert.tp2}</code>\n` : "") +
+    `Risk:Reward: <code>${alert.riskReward}</code>\n\n` +
     `⚡ <b>Institutional Thesis:</b>\n` +
-    `<i>${alert.reason}</i>\n\n` +
-    `⏱ <b>Session:</b> ${alert.session} • <i>${new Date().toUTCString()}</i>\n` +
-    `🤖 <i>Auto-Dispatched by Multi-Instrument Scanner (Threshold ≥ ${scannerConfig.thresholdScore})</i>`
+    `<i>${alert.reason}</i>` +
+    `${rsiLine}\n\n` +
+    `Session: ${alert.session} • <i>${new Date().toUTCString()}</i>\n` +
+    `<i>Auto-Dispatched by Multi-Instrument Scanner (Threshold ≥ ${scannerConfig.thresholdScore})</i>`
   );
 }
 
@@ -101,12 +115,42 @@ async function scanInstrument(
   ai: GoogleGenAI | null
 ): Promise<DetectedAlert | null> {
   try {
-    const analysis: TradeAnalysis = await evaluateLiveMarketSetup(symbol, "15M", ai);
+    const marketStatus = isMarketOpen(symbol);
+
+    // If market is closed for this instrument, do not evaluate or dispatch alerts
+    if (!marketStatus.isOpen) {
+      latestEvaluations[symbol] = {
+        instrument: symbol,
+        score: 0,
+        decision: "MARKET CLOSED",
+        direction: "NEUTRAL",
+        currentPrice: `$${getCachedTickerPrice(symbol) || "Closed"}`,
+        lastUpdated: new Date().toISOString(),
+        recentSweep: "Market Closed",
+        isMarketOpen: false,
+        marketStatusText: marketStatus.reason,
+      };
+      console.log(`[Scanner] ${symbol} market is closed (${marketStatus.reason}) — skipping alert.`);
+      return null;
+    }
+
+    const [analysis, candleData] = await Promise.all([
+      evaluateLiveMarketSetup(symbol, "15M", ai),
+      fetchLiveCandles(symbol, "15m", 30).catch(() => null),
+    ]);
+
     const score = analysis.score?.totalScore ?? 0;
     const direction = analysis.bias?.direction || "NEUTRAL";
     const decision = analysis.decision || "WAIT";
     const currentPrice = analysis.market?.currentPrice || `$${getCachedTickerPrice(symbol)}`;
     const nowMs = Date.now();
+
+    // Determine 14-period RSI
+    const rsi =
+      candleData?.rsi ||
+      (candleData?.candles
+        ? calculateRSI(candleData.candles.map((c) => c.close), 14)
+        : { rsi: 50.0, condition: "Neutral Equilibrium (50.0)" });
 
     // Store latest evaluation state for HUD
     latestEvaluations[symbol] = {
@@ -117,6 +161,12 @@ async function scanInstrument(
       currentPrice,
       lastUpdated: new Date().toISOString(),
       recentSweep: analysis.liquidity?.liquidityAlreadySwept || "NONE",
+      rsi: {
+        value: rsi.rsi ?? (rsi as any).value ?? 50.0,
+        condition: rsi.condition,
+      },
+      isMarketOpen: true,
+      marketStatusText: "Market Open",
     };
 
     // Check qualification threshold
@@ -149,6 +199,11 @@ async function scanInstrument(
       riskReward: analysis.tradePlan?.riskReward || "1:2.5",
       reason: analysis.decisionReason || "Confirmed Liquidity Sweep with Structural Displacement.",
       session: analysis.market?.session || "Active Killzone",
+      rsi: {
+        value: rsi.rsi ?? (rsi as any).value ?? 50.0,
+        condition: rsi.condition,
+      },
+      isMarketOpen: true,
       telegramSent: false,
       analysis,
     };

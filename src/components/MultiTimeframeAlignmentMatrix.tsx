@@ -137,29 +137,29 @@ export const MultiTimeframeAlignmentMatrix: React.FC<
   return (
     <div className="bg-[#0b0e14] border border-slate-800 rounded-xl overflow-hidden font-mono shadow-xl">
       {/* Header Bar */}
-      <div className="p-4 bg-slate-900/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center">
+      <div className="p-3 sm:p-4 bg-slate-900/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center flex-shrink-0">
             <Layers size={18} />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="text-xs font-bold text-white tracking-wider">
-                FRACTAL TIMEFRAME ALIGNMENT MATRIX (1D ➔ 4H ➔ 15M ➔ 1M/5M)
+                FRACTAL ALIGNMENT MATRIX (1D ➔ 4H ➔ 15M ➔ 1M/5M)
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
                 {alignmentPercent}% HARMONIC
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">
-              Institutional order flow operates top-down. Entries require structural confluence across all fractal degrees.
+            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate sm:whitespace-normal">
+              Entries require structural confluence across all fractal degrees.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {/* Status Badge */}
-          <div className={`px-3 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 ${status.color}`}>
+          <div className={`px-2.5 sm:px-3 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 ${status.color}`}>
             <Zap size={13} className="fill-current" />
             <span>{status.badge}</span>
           </div>
@@ -175,7 +175,7 @@ export const MultiTimeframeAlignmentMatrix: React.FC<
 
       {/* Expanded Content: 4-Pillar Grid */}
       {isExpanded && (
-        <div className="p-4 space-y-4">
+        <div className="p-3 sm:p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {layers.map((layer) => {
               const isCurrentTf = selectedTimeframe.toLowerCase().includes(layer.tf.toLowerCase().split("/")[0]);
@@ -185,7 +185,7 @@ export const MultiTimeframeAlignmentMatrix: React.FC<
                 <div
                   key={layer.tf}
                   onClick={() => onSelectTimeframe(layer.tf === "1M/5M" ? "5m" : layer.tf.toLowerCase())}
-                  className={`p-3 rounded-lg border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                  className={`p-3 rounded-lg border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between min-w-0 ${
                     isCurrentTf
                       ? "bg-indigo-950/40 border-indigo-500 shadow-md ring-1 ring-indigo-500/40"
                       : "bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/90"

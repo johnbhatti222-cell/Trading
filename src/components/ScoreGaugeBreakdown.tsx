@@ -58,12 +58,12 @@ export const ScoreGaugeBreakdown: React.FC<ScoreGaugeBreakdownProps> = ({
   ];
 
   return (
-    <div className="bg-[#0f141c] border border-slate-800 rounded-xl p-5 shadow-xl flex flex-col gap-5">
+    <div className="bg-[#0f141c] border border-slate-800 rounded-xl p-4 sm:p-5 shadow-xl flex flex-col gap-4 sm:gap-5">
       {/* Decision Banner */}
-      <div className={`p-4 rounded-lg border ${decisionConfig.bg} flex items-start justify-between gap-4`}>
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5">{decisionConfig.icon}</div>
-          <div>
+      <div className={`p-3.5 sm:p-4 rounded-lg border ${decisionConfig.bg} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4`}>
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="mt-0.5 flex-shrink-0">{decisionConfig.icon}</div>
+          <div className="min-w-0">
             <h3 className="font-mono font-bold text-sm tracking-wide uppercase">
               {decisionConfig.label}
             </h3>
@@ -74,8 +74,8 @@ export const ScoreGaugeBreakdown: React.FC<ScoreGaugeBreakdownProps> = ({
         </div>
 
         {/* Big Score Gauge */}
-        <div className="text-right flex-shrink-0">
-          <div className="text-3xl font-extrabold font-mono text-white tracking-tight">
+        <div className="text-left sm:text-right flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/10 w-full sm:w-auto">
+          <div className="text-2xl sm:text-3xl font-extrabold font-mono text-white tracking-tight">
             {total}
             <span className="text-xs font-normal text-slate-400">/100</span>
           </div>

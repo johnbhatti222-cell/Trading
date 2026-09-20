@@ -245,14 +245,14 @@ export const MultiInstrumentScannerModal: React.FC<MultiInstrumentScannerModalPr
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-[#0b0f19] border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden font-mono text-xs">
         {/* Modal Header */}
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-[#080c14]">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-indigo-950/60 border border-indigo-700/50 text-indigo-400">
+        <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-[#080c14]">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="p-2 rounded-xl bg-indigo-950/60 border border-indigo-700/50 text-indigo-400 flex-shrink-0">
               <Radar size={20} className="animate-spin text-indigo-400" style={{ animationDuration: "12s" }} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white">Multi-Instrument Automated Alert Radar</h2>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h2 className="text-sm sm:text-base font-bold text-white">Multi-Instrument Alert Radar</h2>
                 <span
                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                     scannerStatus?.isRunning
@@ -260,11 +260,11 @@ export const MultiInstrumentScannerModal: React.FC<MultiInstrumentScannerModalPr
                       : "bg-slate-900 border-slate-700 text-slate-400"
                   }`}
                 >
-                  {scannerStatus?.isRunning ? "SCANNER ACTIVE" : "PAUSED"}
+                  {scannerStatus?.isRunning ? "ACTIVE" : "PAUSED"}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Continuously monitors BTC/USD, US30, USD/JPY, and XAU/USD. Auto-dispatches Telegram alerts when confluence reaches ≥ {thresholdScore}/100.
+              <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 truncate sm:whitespace-normal">
+                Monitors BTC/USD, US30, USD/JPY, XAU/USD. Auto-dispatches Telegram alerts when score ≥ {thresholdScore}/100.
               </p>
             </div>
           </div>
@@ -273,7 +273,7 @@ export const MultiInstrumentScannerModal: React.FC<MultiInstrumentScannerModalPr
             <button
               onClick={handleScanNow}
               disabled={isScanningNow}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50 text-[11px] sm:text-xs"
             >
               <RotateCw size={13} className={isScanningNow ? "animate-spin" : ""} />
               <span>{isScanningNow ? "Scanning..." : "Scan All Now"}</span>
@@ -288,7 +288,7 @@ export const MultiInstrumentScannerModal: React.FC<MultiInstrumentScannerModalPr
         </div>
 
         {/* Modal Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5 no-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 sm:space-y-5 no-scrollbar">
           {/* Real-Time Live Status Grid Across Monitored Pairs */}
           <div>
             <div className="flex items-center justify-between mb-2.5">
@@ -324,15 +324,22 @@ export const MultiInstrumentScannerModal: React.FC<MultiInstrumentScannerModalPr
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-bold text-white text-xs">{sym}</span>
-                        <span
-                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                            isTrade
-                              ? "bg-emerald-950/80 border-emerald-500 text-emerald-300"
-                              : "bg-slate-900 border-slate-700 text-slate-400"
-                          }`}
-                        >
-                          {evalData?.decision || "WAIT"}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          {evalData?.isMarketOpen === false && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-rose-950/80 border-rose-700 text-rose-300">
+                              CLOSED
+                            </span>
+                          )}
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                              isTrade
+                                ? "bg-emerald-950/80 border-emerald-500 text-emerald-300"
+                                : "bg-slate-900 border-slate-700 text-slate-400"
+                            }`}
+                          >
+                            {evalData?.decision || "WAIT"}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex items-baseline gap-2 mb-1.5">
@@ -348,10 +355,27 @@ export const MultiInstrumentScannerModal: React.FC<MultiInstrumentScannerModalPr
                         </span>
                       </div>
 
-                      <div className="text-[11px] text-slate-400 mb-2">
-                        <span>Price: </span>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                        <span>Price:</span>
                         <span className="text-slate-200 font-bold">{evalData?.currentPrice || "--"}</span>
                       </div>
+
+                      {evalData?.rsi && (
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 mb-2">
+                          <span>RSI (14):</span>
+                          <span
+                            className={`font-bold ${
+                              evalData.rsi.value >= 70
+                                ? "text-amber-400"
+                                : evalData.rsi.value <= 30
+                                ? "text-cyan-400"
+                                : "text-slate-300"
+                            }`}
+                          >
+                            {evalData.rsi.value} ({evalData.rsi.condition?.split(" ")[0] || "Neutral"})
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="pt-2 border-t border-slate-900 flex items-center justify-between gap-2">
@@ -605,10 +629,17 @@ export const MultiInstrumentScannerModal: React.FC<MultiInstrumentScannerModalPr
                         {alert.instrument}
                       </span>
                       <div>
-                        <span className="font-bold text-white block">
-                          Score: {alert.score}/100 • {alert.direction} ({alert.decision})
-                        </span>
-                        <span className="text-[10px] text-slate-400">{alert.reason}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white block">
+                            Score: {alert.score}/100 • {alert.direction} ({alert.decision})
+                          </span>
+                          {alert.rsi && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-amber-300 font-bold">
+                              RSI {alert.rsi.value}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 block">{alert.reason}</span>
                       </div>
                     </div>
 

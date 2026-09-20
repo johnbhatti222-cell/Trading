@@ -18,12 +18,10 @@ import {
 
 interface SniperConfluenceRadarProps {
   analysis: TradeAnalysis;
-  onOpenSizer?: () => void;
 }
 
 export const SniperConfluenceRadar: React.FC<SniperConfluenceRadarProps> = ({
   analysis,
-  onOpenSizer,
 }) => {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
@@ -367,16 +365,6 @@ export const SniperConfluenceRadar: React.FC<SniperConfluenceRadarProps> = ({
             </span>
           </button>
 
-          {onOpenSizer && (
-            <button
-              onClick={onOpenSizer}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
-            >
-              <Target size={13} />
-              <span>Position Sizer</span>
-            </button>
-          )}
-
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white"
@@ -443,8 +431,8 @@ export const SniperConfluenceRadar: React.FC<SniperConfluenceRadarProps> = ({
             </div>
           </div>
 
-          {/* The 5 Sniper Confluence Gates Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-2.5">
+          {/* The 5 Sniper Confluence Gates Grid (Mobile: 1 col, Tablet: 2-3 cols, Desktop: 5 cols) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
             {/* Gate 1 */}
             <div
               onClick={() => setOverrideGate1(overrideGate1 === null ? !gate1LiquidityPurged : !overrideGate1)}

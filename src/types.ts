@@ -127,6 +127,13 @@ export interface MarketTicker {
   pdl: string;
   rawPrice?: number;
   rawChange24h?: number;
+  // Snipe Execution Authorization fields
+  isAuthorized?: boolean;
+  executionStatus?: "AUTHORIZED" | "NOT AUTHORIZED" | "MARKET CLOSED";
+  statusText?: string;
+  score?: number;
+  decision?: "TRADE" | "WAIT" | "NO TRADE" | "MARKET CLOSED";
+  setupType?: string;
 }
 
 export interface LiveCandle {
@@ -222,8 +229,11 @@ export interface LiveCandlesResponse {
   pdl: number;
   bsl: number;
   ssl: number;
-  recentSweep: "BSL_SWEPT" | "SSL_SWEPT" | "NONE";
+  recentSweep: "BSL_SWEPT" | "SSL_SWEPT" | "BULLISH_BOS" | "BEARISH_BOS" | "NONE";
   sweepDetail?: string;
+  isBreakout?: boolean;
+  breakoutLevel?: number;
+  breakoutType?: "BULLISH_BOS" | "BEARISH_BOS";
   rsi?: {
     value: number;
     condition: string;
@@ -297,6 +307,117 @@ export interface ScannerStatus {
       marketStatusText?: string;
     }
   >;
+}
+
+export interface BacktestParams {
+  instrument: string;
+  timeframe: string;
+  period: "1M" | "3M" | "6M" | "12M";
+  thresholdScore: number;
+  riskRewardRatio: number; // e.g. 2.0, 2.5, 3.0
+  tpStrategy: "FIXED_RR" | "TRAILING_BE" | "DYNAMIC_PARTIAL";
+  sessionFilter: "ALL" | "KILLZONES_ONLY" | "LONDON_ONLY" | "NY_ONLY";
+  riskPerTradePct: number; // e.g. 1.0%
+  initialBalance: number; // e.g. $10,000
+}
+
+export interface BacktestFactorsBreakdown {
+  htfStructure: number; // Max 20
+  liquiditySweep: number; // Max 20
+  marketStructureShift: number; // Max 15
+  displacement: number; // Max 10
+  fvgRetest: number; // Max 10
+  macroRegime: number; // Max 10
+  sessionKillzone: number; // Max 5
+  riskReward: number; // Max 5
+  invalidationClarity: number; // Max 5
+  totalScore: number;
+}
+
+export interface BacktestTrade {
+  id: string;
+  tradeNumber: number;
+  entryDate: string;
+  exitDate: string;
+  instrument: string;
+  direction: "LONG" | "SHORT";
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  exitPrice: number;
+  exitReason: "TP_HIT" | "SL_HIT" | "BREAKEVEN" | "TIME_EXPIRED";
+  barsHeld: number;
+  confluenceScore: number;
+  factors: BacktestFactorsBreakdown;
+  session: string;
+  returnR: number;
+  pnlUsd: number;
+  pnlPct: number;
+  runningBalance: number;
+  drawdownPct: number;
+  setupType: string;
+  isWin: boolean;
+}
+
+export interface EquityCurvePoint {
+  tradeNumber: number;
+  date: string;
+  equity: number;
+  cumulativeR: number;
+  drawdownPct: number;
+  tradeReturnR: number;
+  isWin: boolean;
+  peakEquity: number;
+}
+
+export interface BacktestMetrics {
+  totalTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  breakevenTrades: number;
+  winRate: number; // percentage
+  lossRate: number;
+  profitFactor: number;
+  mathematicalExpectancyR: number; // E = (Win% * AvgWin) - (Loss% * AvgLoss) in R
+  netReturnR: number;
+  netReturnPct: number;
+  netProfitUsd: number;
+  maxDrawdownPct: number;
+  maxDrawdownR: number;
+  averageWinR: number;
+  averageLossR: number;
+  winLossRatio: number;
+  maxConsecutiveWins: number;
+  maxConsecutiveLosses: number;
+  averageBarsHeld: number;
+  sharpeRatio: number;
+  calmarRatio: number;
+  sessionAttribution: {
+    session: string;
+    trades: number;
+    winRate: number;
+    netR: number;
+    profitFactor: number;
+  }[];
+  scoreAttribution: {
+    bracket: string;
+    trades: number;
+    winRate: number;
+    netR: number;
+  }[];
+  directionAttribution: {
+    longs: { trades: number; winRate: number; netR: number };
+    shorts: { trades: number; winRate: number; netR: number };
+  };
+}
+
+export interface BacktestResult {
+  params: BacktestParams;
+  metrics: BacktestMetrics;
+  equityCurve: EquityCurvePoint[];
+  trades: BacktestTrade[];
+  candlesAnalyzed: number;
+  simulationTimeMs: number;
 }
 
 

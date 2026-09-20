@@ -11,7 +11,10 @@ import {
   Sparkles,
   Sliders,
   Play,
+  Pause,
   RotateCcw,
+  RotateCw,
+  RefreshCw,
   CheckCircle2,
   AlertTriangle,
   Layers,
@@ -24,6 +27,7 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
+  Lock,
 } from "lucide-react";
 
 interface SetupEvaluatorProps {
@@ -55,10 +59,35 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
   const [activeMode, setActiveMode] = useState<"live" | "presets" | "custom">("live");
 
   // Live stream controls
-  const [selectedInstrument, setSelectedInstrument] = useState<string>("XAU/USD");
+  const [selectedInstrument, setSelectedInstrument] = useState<string>(
+    currentAnalysis.market?.instrument || "XAU/USD"
+  );
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>("15m");
   const [isEvaluatingLive, setIsEvaluatingLive] = useState(false);
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
+
+  // Auto-Refresh state
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [refreshIntervalSec, setRefreshIntervalSec] = useState<number>(10);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(10);
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [liveTickers, setLiveTickers] = useState<
+    Record<
+      string,
+      {
+        price: string;
+        change24h: string;
+        bias?: string;
+        isAuthorized?: boolean;
+        executionStatus?: "AUTHORIZED" | "NOT AUTHORIZED" | "MARKET CLOSED";
+        statusText?: string;
+        score?: number;
+        decision?: "TRADE" | "WAIT" | "NO TRADE" | "MARKET CLOSED";
+        setupType?: string;
+      }
+    >
+  >({});
 
   // Preset Selection
   const [selectedPresetId, setSelectedPresetId] = useState<string>("gold-ny-sweep");
@@ -77,19 +106,85 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
   const [isCustomAuditing, setIsCustomAuditing] = useState(false);
   const [customAuditError, setCustomAuditError] = useState<string | null>(null);
 
+  // Synchronize selected instrument if external analysis changes
+  useEffect(() => {
+    if (currentAnalysis?.market?.instrument && currentAnalysis.market.instrument !== selectedInstrument) {
+      setSelectedInstrument(currentAnalysis.market.instrument);
+    }
+  }, [currentAnalysis?.market?.instrument]);
+
+  // Fetch quick live tickers for all active market cards
+  const fetchLiveTickers = async () => {
+    try {
+      const res = await fetch("/api/live-tickers");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const map: Record<
+            string,
+            {
+              price: string;
+              change24h: string;
+              bias?: string;
+              isAuthorized?: boolean;
+              executionStatus?: "AUTHORIZED" | "NOT AUTHORIZED" | "MARKET CLOSED";
+              statusText?: string;
+              score?: number;
+              decision?: "TRADE" | "WAIT" | "NO TRADE" | "MARKET CLOSED";
+              setupType?: string;
+            }
+          > = {};
+          data.forEach((t: any) => {
+            map[t.symbol] = {
+              price: t.price,
+              change24h: t.change24h,
+              bias: t.bias,
+              isAuthorized: t.isAuthorized,
+              executionStatus: t.executionStatus,
+              statusText: t.statusText,
+              score: t.score,
+              decision: t.decision,
+              setupType: t.setupType,
+            };
+          });
+          setLiveTickers(map);
+        }
+      }
+    } catch (err) {
+      console.warn("Live tickers fetch notice:", err);
+    }
+  };
+
+  // Fetch tickers on mount
+  useEffect(() => {
+    fetchLiveTickers();
+  }, []);
+
   // Evaluate Live Market Function
-  const handleEvaluateLiveMarket = async (symbolToAudit?: string, tfToAudit?: string) => {
+  const handleEvaluateLiveMarket = async (
+    symbolToAudit?: string,
+    tfToAudit?: string,
+    isBackground: boolean = false
+  ) => {
     const symbol = symbolToAudit || selectedInstrument;
     const tf = tfToAudit || selectedTimeframe;
 
-    setIsEvaluatingLive(true);
+    if (!isBackground) {
+      setIsEvaluatingLive(true);
+    } else {
+      setIsAutoRefreshing(true);
+    }
     setLiveError(null);
 
     try {
       const res = await fetch("/api/analyze-live", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, timeframe: tf.toUpperCase() }),
+        body: JSON.stringify({
+          symbol,
+          timeframe: tf.toUpperCase(),
+          forceRefresh: isBackground,
+        }),
       });
 
       if (!res.ok) {
@@ -99,24 +194,52 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
 
       const data: TradeAnalysis = await res.json();
       onAnalysisChange(data);
+      setLastRefreshed(new Date());
+
+      // Also refresh live tickers for all instrument cards
+      fetchLiveTickers();
     } catch (err: any) {
       console.error("Live market audit failed:", err);
-      setLiveError(err.message || "Failed to evaluate live market. Ensure server is connected.");
+      if (!isBackground) {
+        setLiveError(err.message || "Failed to evaluate live market. Ensure server is connected.");
+      }
     } finally {
       setIsEvaluatingLive(false);
+      setIsAutoRefreshing(false);
     }
   };
+
+  // Auto-refresh countdown interval effect (runs in live mode)
+  useEffect(() => {
+    if (activeMode !== "live" || !autoRefreshEnabled) return;
+
+    const interval = setInterval(() => {
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          // Trigger background auto-refresh of live setup & candles
+          handleEvaluateLiveMarket(selectedInstrument, selectedTimeframe, true);
+          fetchLiveTickers();
+          return refreshIntervalSec;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeMode, autoRefreshEnabled, refreshIntervalSec, selectedInstrument, selectedTimeframe]);
 
   // Switch Instrument in Live Mode
   const handleSelectLiveInstrument = (symbol: string) => {
     setSelectedInstrument(symbol);
-    handleEvaluateLiveMarket(symbol, selectedTimeframe);
+    setSecondsRemaining(refreshIntervalSec);
+    handleEvaluateLiveMarket(symbol, selectedTimeframe, false);
   };
 
   // Switch Timeframe in Live Mode
   const handleSelectTimeframe = (tf: string) => {
     setSelectedTimeframe(tf);
-    handleEvaluateLiveMarket(selectedInstrument, tf);
+    setSecondsRemaining(refreshIntervalSec);
+    handleEvaluateLiveMarket(selectedInstrument, tf, false);
   };
 
   // Select Preset Scenario
@@ -169,6 +292,14 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
       setIsCustomAuditing(false);
     }
   };
+
+  // Compute number of markets currently authorized for snipe execution
+  const authorizedCount = LIVE_INSTRUMENTS.filter((inst) => {
+    const isSelected = selectedInstrument === inst.symbol;
+    if (isSelected) return currentAnalysis.decision === "TRADE";
+    const ticker = liveTickers[inst.symbol];
+    return ticker?.isAuthorized ?? (ticker?.executionStatus === "AUTHORIZED");
+  }).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -224,10 +355,36 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
         </div>
 
         {activeMode === "live" && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap gap-2">
             <button
-              onClick={() => handleEvaluateLiveMarket()}
-              disabled={isEvaluatingLive}
+              onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+              title={autoRefreshEnabled ? "Pause auto-refresh" : "Resume auto-refresh"}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono font-medium flex items-center gap-1.5 transition-all ${
+                autoRefreshEnabled
+                  ? "bg-slate-900/80 border-emerald-800/60 text-emerald-300 hover:bg-slate-800"
+                  : "bg-slate-900/80 border-slate-700 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {autoRefreshEnabled ? (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-300"></span>
+                  </span>
+                  <Pause size={12} />
+                  <span>Auto-Refresh: {secondsRemaining}s</span>
+                </>
+              ) : (
+                <>
+                  <Play size={12} className="text-amber-400" />
+                  <span className="text-amber-300">Paused</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => handleEvaluateLiveMarket(selectedInstrument, selectedTimeframe, false)}
+              disabled={isEvaluatingLive || isAutoRefreshing}
               className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-mono text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950 transition-all"
             >
               {isEvaluatingLive ? (
@@ -249,41 +406,245 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
       {/* Mode 1: Live Market Controller */}
       {activeMode === "live" && (
         <div className="bg-[#0f141c] border border-slate-800 rounded-xl p-4 shadow-xl">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2">
-              <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-              <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
-                Active Live Markets (Institutional Feeds • Crypto, Gold, Forex & Indices)
-              </h2>
+          {/* Header with Title & Comprehensive Auto-Refresh HUD */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800/80">
+            <div className="flex items-center gap-2.5">
+              <div className="relative">
+                <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                {isAutoRefreshing && (
+                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-400"></span>
+                  </span>
+                )}
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+                    Active Live Markets (Institutional Feeds • Crypto, Gold, Forex & Indices)
+                  </h2>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/80 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    REAL-TIME
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-slate-900 border border-slate-800 flex items-center gap-1.5">
+                    <span className="text-slate-400">Execution Status:</span>
+                    <span className={authorizedCount > 0 ? "text-emerald-400 font-bold" : "text-slate-400"}>
+                      {authorizedCount} Authorized
+                    </span>
+                  </span>
+                </div>
+                <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+                  Select an instrument to stream real candlesticks & evaluate institutional structure
+                </p>
+              </div>
             </div>
-            <span className="text-[11px] font-mono text-slate-400">
-              Select an instrument to stream real candlesticks & evaluate institutional structure
-            </span>
+
+            {/* Auto-Refresh Control HUD */}
+            <div className="flex flex-wrap items-center gap-2 bg-slate-950/80 p-1.5 rounded-lg border border-slate-800/80">
+              {/* Cadence Pills */}
+              <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded border border-slate-800 text-[10px] font-mono text-slate-400">
+                <span className="px-1 text-slate-500 font-semibold">Every:</span>
+                {[5, 10, 15, 30].map((sec) => (
+                  <button
+                    key={sec}
+                    onClick={() => {
+                      setRefreshIntervalSec(sec);
+                      setSecondsRemaining(sec);
+                    }}
+                    className={`px-1.5 py-0.5 rounded transition-colors ${
+                      refreshIntervalSec === sec
+                        ? "bg-emerald-600 text-white font-bold"
+                        : "hover:text-slate-200 text-slate-400"
+                    }`}
+                  >
+                    {sec}s
+                  </button>
+                ))}
+              </div>
+
+              {/* Status & Countdown Pill */}
+              <div
+                className={`px-2.5 py-1 rounded text-xs font-mono flex items-center gap-1.5 border transition-all ${
+                  autoRefreshEnabled
+                    ? "bg-slate-900 border-emerald-900/60 text-emerald-300"
+                    : "bg-slate-900 border-slate-800 text-slate-400"
+                }`}
+              >
+                {autoRefreshEnabled ? (
+                  <>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                    </span>
+                    <span>Next sync: </span>
+                    <span className="font-bold text-white tabular-nums">{secondsRemaining}s</span>
+                  </>
+                ) : (
+                  <span>Auto-Refresh Paused</span>
+                )}
+              </div>
+
+              {/* Pause / Resume Button */}
+              <button
+                onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+                title={autoRefreshEnabled ? "Pause Auto-Refresh" : "Resume Auto-Refresh"}
+                className={`p-1.5 rounded border text-xs transition-colors ${
+                  autoRefreshEnabled
+                    ? "bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300"
+                    : "bg-amber-950/80 hover:bg-amber-900 border-amber-800 text-amber-300"
+                }`}
+              >
+                {autoRefreshEnabled ? <Pause size={13} /> : <Play size={13} />}
+              </button>
+
+              {/* Instant Manual Refresh */}
+              <button
+                onClick={() => handleEvaluateLiveMarket(selectedInstrument, selectedTimeframe, true)}
+                disabled={isEvaluatingLive || isAutoRefreshing}
+                title="Force refresh live markets & candles"
+                className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 hover:text-white text-xs font-mono flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <RotateCw
+                  size={12}
+                  className={isEvaluatingLive || isAutoRefreshing ? "animate-spin text-emerald-400" : "text-slate-400"}
+                />
+                <span>Sync Now</span>
+              </button>
+
+              {/* Timestamp */}
+              <span className="text-[10px] font-mono text-slate-500 hidden md:inline px-1">
+                {lastRefreshed.toLocaleTimeString()}
+              </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+          {/* 7 Live Market Cards with real-time prices & execution status */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
             {LIVE_INSTRUMENTS.map((inst) => {
               const isSelected = selectedInstrument === inst.symbol;
+              const ticker = liveTickers[inst.symbol];
+              const displayPrice =
+                ticker?.price ||
+                (isSelected && currentAnalysis.market?.currentPrice ? currentAnalysis.market.currentPrice : "---");
+              const change24h = ticker?.change24h;
+              const isPositiveChange = change24h ? !change24h.startsWith("-") : true;
+
+              // Compute Sniper Execution Authorization status
+              const isMarketClosed = ticker?.executionStatus === "MARKET CLOSED";
+              const isAuthorized = isSelected
+                ? currentAnalysis.decision === "TRADE"
+                : (ticker?.isAuthorized ?? (ticker?.executionStatus === "AUTHORIZED"));
+
+              const subDetail = isSelected
+                ? (currentAnalysis.decision === "TRADE"
+                    ? (currentAnalysis.setup?.setupType || "A+ Setup Active")
+                    : currentAnalysis.decision === "WAIT"
+                    ? "Awaiting Sweep / BOS"
+                    : "Stand Down / In Range")
+                : isMarketClosed
+                ? "Market Closed"
+                : (ticker?.setupType || (isAuthorized ? "A+ Setup Active" : "Awaiting Sweep / BOS"));
+
               return (
                 <button
                   key={inst.symbol}
                   onClick={() => handleSelectLiveInstrument(inst.symbol)}
-                  className={`p-3 rounded-xl border text-left font-mono text-xs transition-all flex flex-col justify-between ${
+                  className={`p-3 rounded-xl border text-left font-mono text-xs transition-all flex flex-col justify-between relative overflow-hidden group ${
                     isSelected
-                      ? "bg-slate-800/90 border-emerald-500 shadow-md ring-1 ring-emerald-500/50"
+                      ? "bg-slate-800/90 border-emerald-500 shadow-lg ring-1 ring-emerald-500/50"
+                      : isAuthorized
+                      ? "bg-gradient-to-b from-emerald-950/25 to-slate-900/90 border-emerald-600/50 hover:border-emerald-400/80 hover:bg-slate-800/70 shadow-sm"
                       : "bg-slate-900/60 border-slate-800/80 hover:bg-slate-800/50 hover:border-slate-700"
                   }`}
                 >
-                  <div className="flex items-center justify-between w-full mb-1">
-                    <span className="font-bold text-white text-xs flex items-center gap-1.5">
-                      <span>{inst.icon}</span>
-                      <span>{inst.symbol}</span>
-                    </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
-                      {inst.category}
-                    </span>
+                  {isSelected && (
+                    <div className="absolute top-0 right-0 left-0 h-0.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 animate-pulse" />
+                  )}
+
+                  <div>
+                    {/* Top Row: Icon, Symbol, and Category */}
+                    <div className="flex items-center justify-between w-full mb-1.5">
+                      <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                        <span className="text-sm">{inst.icon}</span>
+                        <span className="group-hover:text-emerald-300 transition-colors">{inst.symbol}</span>
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {isSelected && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">
+                            LIVE
+                          </span>
+                        )}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
+                          {inst.category}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Live Real-Time Price & 24h Change */}
+                    <div className="my-1">
+                      <div className="text-sm font-bold text-white font-mono tracking-tight flex items-center justify-between">
+                        <span>{displayPrice}</span>
+                        {isSelected && isAutoRefreshing && (
+                          <RotateCw size={10} className="animate-spin text-emerald-400" />
+                        )}
+                      </div>
+                      {change24h && (
+                        <div
+                          className={`text-[10px] font-mono mt-0.5 flex items-center gap-0.5 font-medium ${
+                            isPositiveChange ? "text-emerald-400" : "text-rose-400"
+                          }`}
+                        >
+                          {isPositiveChange ? (
+                            <TrendingUp size={11} className="inline" />
+                          ) : (
+                            <TrendingDown size={11} className="inline" />
+                          )}
+                          <span>{change24h}</span>
+                          {ticker?.bias && (
+                            <span className="text-slate-500 ml-1 text-[9px]">• {ticker.bias}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[11px] text-slate-400">{inst.name}</p>
+
+                  {/* Execution Status Badge & Details */}
+                  <div className="mt-2.5 pt-2 border-t border-slate-800/80 w-full">
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">
+                        Execution
+                      </span>
+                      {isAuthorized ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 shadow-sm shadow-emerald-950/40">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Authorized
+                        </span>
+                      ) : isMarketClosed ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-950 text-amber-400/90 border border-amber-900/40">
+                          <Lock size={9} className="text-amber-400/80" />
+                          Not Authorized
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-950 text-slate-400 border border-slate-800">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                          Not Authorized
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className={`text-[10px] font-mono truncate leading-tight ${
+                        isAuthorized
+                          ? "text-emerald-300/80 font-semibold"
+                          : isMarketClosed
+                          ? "text-amber-500/70"
+                          : "text-slate-400"
+                      }`}
+                      title={subDetail}
+                    >
+                      {subDetail}
+                    </div>
+                  </div>
                 </button>
               );
             })}
@@ -523,6 +884,8 @@ export const SetupEvaluator: React.FC<SetupEvaluatorProps> = ({
             analysis={currentAnalysis}
             selectedTimeframe={selectedTimeframe}
             onTimeframeChange={handleSelectTimeframe}
+            onRefreshAnalysis={() => handleEvaluateLiveMarket(selectedInstrument, selectedTimeframe, true)}
+            isAutoRefreshing={isAutoRefreshing}
           />
           <TradePlanCard analysis={currentAnalysis} onOpenConsult={onOpenConsult} />
         </div>

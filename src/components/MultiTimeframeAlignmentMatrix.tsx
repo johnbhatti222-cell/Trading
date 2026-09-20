@@ -151,7 +151,7 @@ export const MultiTimeframeAlignmentMatrix: React.FC<
                 {alignmentPercent}% HARMONIC
               </span>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate sm:whitespace-normal">
+            <p className="text-[10px] sm:text-[11px] text-slate-400 break-words leading-snug mt-0.5">
               Entries require structural confluence across all fractal degrees.
             </p>
           </div>

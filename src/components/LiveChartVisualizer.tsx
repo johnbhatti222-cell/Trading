@@ -26,12 +26,16 @@ interface LiveChartVisualizerProps {
   analysis: TradeAnalysis;
   selectedTimeframe?: string;
   onTimeframeChange?: (tf: string) => void;
+  onRefreshAnalysis?: () => void;
+  isAutoRefreshing?: boolean;
 }
 
 export const LiveChartVisualizer: React.FC<LiveChartVisualizerProps> = ({
   analysis,
   selectedTimeframe = "15m",
   onTimeframeChange,
+  onRefreshAnalysis,
+  isAutoRefreshing = false,
 }) => {
   const [showLiquidity, setShowLiquidity] = useState(true);
   const [showFvg, setShowFvg] = useState(true);
@@ -115,12 +119,14 @@ export const LiveChartVisualizer: React.FC<LiveChartVisualizerProps> = ({
 
   useEffect(() => {
     fetchCandles();
-  }, [instrument, timeframe]);
+  }, [instrument, timeframe, analysis.market.currentPrice, analysis.timestamp]);
 
-  // Auto-refresh interval every 6 seconds
+  // Auto-refresh interval every 6 seconds for live candle feeds
   useEffect(() => {
     if (!autoRefresh) return;
-    const interval = setInterval(fetchCandles, 6000);
+    const interval = setInterval(() => {
+      fetchCandles();
+    }, 6000);
     return () => clearInterval(interval);
   }, [autoRefresh, instrument, timeframe]);
 
@@ -495,12 +501,16 @@ export const LiveChartVisualizer: React.FC<LiveChartVisualizerProps> = ({
 
           {/* Manual Refresh */}
           <button
-            onClick={fetchCandles}
-            disabled={isLoading}
-            title="Refresh candles"
-            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-colors"
+            onClick={() => {
+              fetchCandles();
+              if (onRefreshAnalysis) onRefreshAnalysis();
+            }}
+            disabled={isLoading || isAutoRefreshing}
+            title="Refresh candles & institutional analysis"
+            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-colors flex items-center gap-1"
           >
-            <RotateCw size={13} className={isLoading ? "animate-spin text-sky-400" : ""} />
+            <RotateCw size={13} className={isLoading || isAutoRefreshing ? "animate-spin text-emerald-400" : ""} />
+            <span className="text-[10px] hidden sm:inline">Sync</span>
           </button>
         </div>
       </div>
@@ -1187,7 +1197,12 @@ export const LiveChartVisualizer: React.FC<LiveChartVisualizerProps> = ({
               onChange={(e) => setAutoRefresh(e.target.checked)}
               className="rounded bg-slate-900 border-slate-700 text-indigo-500"
             />
-            <span>Auto-refresh (6s)</span>
+            <span className="flex items-center gap-1">
+              <span>Auto-refresh (6s)</span>
+              {isAutoRefreshing && (
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              )}
+            </span>
           </label>
           <span>•</span>
           <span>Updated: {lastRefreshed.toLocaleTimeString()}</span>

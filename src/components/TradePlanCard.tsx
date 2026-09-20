@@ -26,6 +26,19 @@ export const TradePlanCard: React.FC<TradePlanCardProps> = ({ analysis, onOpenCo
   const isLong = analysis.tradePlan.direction === "LONG";
   const isNone = analysis.tradePlan.direction === "NONE" || analysis.decision === "NO TRADE";
 
+  // Helper to parse price & descriptive note from strings like "$80,771.56 (Structural Invalidation above sweep wick)"
+  const parsePriceAndNote = (rawStr: string | undefined) => {
+    if (!rawStr) return { price: "---", note: "" };
+    const match = rawStr.match(/^([^()]+)(?:\s*\((.*?)\))?$/);
+    if (match) {
+      return {
+        price: match[1].trim(),
+        note: match[2]?.trim() || "",
+      };
+    }
+    return { price: rawStr, note: "" };
+  };
+
   const handleCopyPlan = () => {
     const text = `
 === MASTER TRADING ANALYST PLAN ===
@@ -47,6 +60,37 @@ KEY RISK: ${analysis.keyRisk}
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const stopLossParsed = parsePriceAndNote(analysis.tradePlan.stopLoss);
+  const tp1Parsed = parsePriceAndNote(analysis.tradePlan.tp1);
+  const tp2Parsed = parsePriceAndNote(analysis.tradePlan.tp2);
+  const tp3Parsed = parsePriceAndNote(analysis.tradePlan.tp3);
+
+  // Helper to render entry zone cleanly without truncation
+  const renderEntryZone = () => {
+    const zone = analysis.tradePlan.entryZone;
+    if (!zone) return <span className="text-slate-400">---</span>;
+
+    // Check if zone is a range like "$80,532.56 – $80,610.00" or "$80,532.56 - $80,610.00"
+    const parts = zone.split(/\s*[-–—]\s*/);
+    if (parts.length === 2 && parts[0].startsWith("$") && parts[1].startsWith("$")) {
+      return (
+        <div className="flex items-baseline gap-1.5 flex-wrap font-mono">
+          <span className="text-base sm:text-lg font-bold text-sky-300 tracking-tight">{parts[0]}</span>
+          <span className="text-xs text-sky-400 font-semibold uppercase px-1 py-0.5 rounded bg-sky-950/60 border border-sky-900/60">
+            to
+          </span>
+          <span className="text-base sm:text-lg font-bold text-sky-300 tracking-tight">{parts[1]}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="text-sm sm:text-base font-mono font-bold text-sky-300 break-words leading-snug">
+        {zone}
+      </div>
+    );
   };
 
   return (
@@ -96,96 +140,184 @@ KEY RISK: ${analysis.keyRisk}
         </div>
       </div>
 
-      {/* Trade Execution Matrix */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Direction & Action */}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-3">
-          <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-            Order Direction
-          </span>
-          <div className="text-base font-mono font-bold flex items-center gap-2">
-            {isLong && <span className="text-emerald-400">🟢 BUY / LONG</span>}
-            {isShort && <span className="text-rose-400">🔴 SELL / SHORT</span>}
-            {isNone && <span className="text-slate-400">⚪ NO EXECUTION</span>}
+      {/* Trade Execution Matrix - 4 Cards, with zero truncation and spacious padding */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+        {/* Card 1: Direction & Action */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+          <div>
+            <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2 font-semibold">
+              Order Direction
+            </span>
+            <div className="inline-block">
+              {isLong && (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono font-bold text-sm tracking-wide shadow-sm whitespace-nowrap">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+                  </span>
+                  BUY / LONG
+                </span>
+              )}
+              {isShort && (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-500/15 text-rose-300 border border-rose-500/30 font-mono font-bold text-sm tracking-wide shadow-sm whitespace-nowrap">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-400"></span>
+                  </span>
+                  SELL / SHORT
+                </span>
+              )}
+              {isNone && (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 font-mono font-bold text-sm tracking-wide shadow-sm whitespace-nowrap">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                  NO EXECUTION
+                </span>
+              )}
+            </div>
           </div>
-          <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-            Setup: {analysis.setup.setupType}
-          </span>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-800/80">
+            <span className="text-[11px] text-slate-400 font-mono block leading-relaxed break-words">
+              <span className="text-slate-500 font-medium">Setup: </span>
+              <span className="text-slate-200 font-semibold">{analysis.setup.setupType}</span>
+            </span>
+          </div>
         </div>
 
-        {/* Entry Zone */}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-3">
-          <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-            Entry Zone
-          </span>
-          <div className="text-base font-mono font-bold text-sky-300 truncate">
-            {analysis.tradePlan.entryZone}
+        {/* Card 2: Entry Zone */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+          <div>
+            <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2 font-semibold">
+              Entry Zone
+            </span>
+            {renderEntryZone()}
           </div>
-          <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-            Confirmation: {analysis.setup.confirmationRequired}
-          </span>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-800/80">
+            <span className="text-[11px] text-slate-400 font-mono block leading-relaxed break-words">
+              <span className="text-slate-500 font-medium">Confirmation: </span>
+              <span className="text-slate-300">{analysis.setup.confirmationRequired}</span>
+            </span>
+          </div>
         </div>
 
-        {/* Stop Loss & Invalidation */}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-3">
-          <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-            Stop Loss (Invalidation)
-          </span>
-          <div className="text-base font-mono font-bold text-rose-400 truncate">
-            {analysis.tradePlan.stopLoss}
+        {/* Card 3: Stop Loss & Invalidation */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+          <div>
+            <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2 font-semibold">
+              Stop Loss (Invalidation)
+            </span>
+            <div className="text-base sm:text-lg font-mono font-bold text-rose-400 tracking-tight break-words">
+              {stopLossParsed.price}
+            </div>
           </div>
-          <span className="text-[11px] text-rose-300/80 font-mono mt-1 block truncate">
-            Logical Swing Invalidation
-          </span>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-800/80">
+            <span className="text-[11px] text-rose-300/90 font-mono block leading-relaxed break-words">
+              <span className="text-rose-400/70 font-medium">Condition: </span>
+              <span>{stopLossParsed.note || "Strict invalidation at key swing boundary"}</span>
+            </span>
+          </div>
         </div>
 
-        {/* Risk / Reward */}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-3">
-          <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-            Risk / Reward Ratio
-          </span>
-          <div className="text-base font-mono font-bold text-emerald-400">
-            {analysis.tradePlan.riskReward}
+        {/* Card 4: Risk / Reward */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+          <div>
+            <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-2 font-semibold">
+              Risk / Reward Ratio
+            </span>
+            <div className="text-base sm:text-lg font-mono font-bold text-emerald-400 tracking-tight">
+              {analysis.tradePlan.riskReward}
+            </div>
           </div>
-          <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-            Institutional minimum: 1:2.0
-          </span>
+
+          <div className="mt-3 pt-2.5 border-t border-slate-800/80">
+            <div className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5 leading-snug">
+              <CheckCircle size={13} className="text-emerald-400 flex-shrink-0" />
+              <span>
+                Institutional threshold:{" "}
+                <strong className="text-slate-300 font-semibold">1:2.0 min</strong>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Structured Take Profit Targets */}
-      <div className="bg-slate-900/50 border border-slate-800/80 rounded-lg p-4">
+      <div className="bg-slate-900/50 border border-slate-800/80 rounded-xl p-4">
         <h4 className="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
           <Target size={14} className="text-emerald-400" />
           Structured Liquidity Targets (Take Profit Hierarchy)
         </h4>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-md">
-            <div className="flex items-center justify-between text-xs font-mono mb-1">
-              <span className="text-emerald-400 font-bold">TP1 (Nearest Opposing)</span>
-              <span className="text-[10px] text-slate-400">50% Scale-out</span>
+          {/* TP1 */}
+          <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-lg flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-mono mb-1.5">
+                <span className="text-emerald-400 font-bold">TP1 (Nearest Opposing)</span>
+                <span className="text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono">
+                  50% Scale-out
+                </span>
+              </div>
+              <p className="text-base font-mono font-bold text-white tracking-tight break-words">
+                {tp1Parsed.price}
+              </p>
+              {tp1Parsed.note && (
+                <p className="text-[11px] text-emerald-300/80 font-mono mt-0.5 break-words">
+                  {tp1Parsed.note}
+                </p>
+              )}
             </div>
-            <p className="text-sm font-mono font-semibold text-white">{analysis.tradePlan.tp1}</p>
-            <p className="text-[11px] text-slate-400 mt-1">Take partials & move stop to breakeven</p>
+            <p className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-900 font-mono">
+              Take partials & move stop to breakeven
+            </p>
           </div>
 
-          <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-md">
-            <div className="flex items-center justify-between text-xs font-mono mb-1">
-              <span className="text-sky-400 font-bold">TP2 (Structural Target)</span>
-              <span className="text-[10px] text-slate-400">30% Scale-out</span>
+          {/* TP2 */}
+          <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-lg flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-mono mb-1.5">
+                <span className="text-sky-400 font-bold">TP2 (Structural Target)</span>
+                <span className="text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono">
+                  30% Scale-out
+                </span>
+              </div>
+              <p className="text-base font-mono font-bold text-white tracking-tight break-words">
+                {tp2Parsed.price}
+              </p>
+              {tp2Parsed.note && (
+                <p className="text-[11px] text-sky-300/80 font-mono mt-0.5 break-words">
+                  {tp2Parsed.note}
+                </p>
+              )}
             </div>
-            <p className="text-sm font-mono font-semibold text-white">{analysis.tradePlan.tp2}</p>
-            <p className="text-[11px] text-slate-400 mt-1">Major intermediate swing boundary</p>
+            <p className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-900 font-mono">
+              Major intermediate swing boundary
+            </p>
           </div>
 
-          <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-md">
-            <div className="flex items-center justify-between text-xs font-mono mb-1">
-              <span className="text-purple-400 font-bold">TP3 (HTF Liquidity Pool)</span>
-              <span className="text-[10px] text-slate-400">20% Runner</span>
+          {/* TP3 */}
+          <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-lg flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-mono mb-1.5">
+                <span className="text-purple-400 font-bold">TP3 (HTF Liquidity Pool)</span>
+                <span className="text-[10px] text-slate-400 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono">
+                  20% Runner
+                </span>
+              </div>
+              <p className="text-base font-mono font-bold text-white tracking-tight break-words">
+                {tp3Parsed.price}
+              </p>
+              {tp3Parsed.note && (
+                <p className="text-[11px] text-purple-300/80 font-mono mt-0.5 break-words">
+                  {tp3Parsed.note}
+                </p>
+              )}
             </div>
-            <p className="text-sm font-mono font-semibold text-white">{analysis.tradePlan.tp3}</p>
-            <p className="text-[11px] text-slate-400 mt-1">Daily / 4H opposing liquidity extreme</p>
+            <p className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-900 font-mono">
+              Daily / 4H opposing liquidity extreme
+            </p>
           </div>
         </div>
       </div>

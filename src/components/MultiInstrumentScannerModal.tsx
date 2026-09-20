@@ -263,7 +263,7 @@ export const MultiInstrumentScannerModal: React.FC<MultiInstrumentScannerModalPr
                   {scannerStatus?.isRunning ? "ACTIVE" : "PAUSED"}
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 truncate sm:whitespace-normal">
+              <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 break-words leading-snug">
                 Monitors BTC/USD, US30, USD/JPY, XAU/USD. Auto-dispatches Telegram alerts when score ≥ {thresholdScore}/100.
               </p>
             </div>
@@ -381,8 +381,12 @@ export const MultiInstrumentScannerModal: React.FC<MultiInstrumentScannerModalPr
                     <div className="pt-2 border-t border-slate-900 flex items-center justify-between gap-2">
                       <span className="text-[9px] text-slate-500">
                         {evalData?.recentSweep && evalData.recentSweep !== "NONE"
-                          ? `⚡ ${evalData.recentSweep}`
-                          : "Scanning sweeps"}
+                          ? evalData.recentSweep === "BULLISH_BOS"
+                            ? "🚀 Bullish BOS"
+                            : evalData.recentSweep === "BEARISH_BOS"
+                            ? "🔻 Bearish BOS"
+                            : `⚡ ${evalData.recentSweep}`
+                          : "Scanning structure"}
                       </span>
 
                       {onSelectInstrument && (

@@ -199,7 +199,7 @@ export const LiquidityProximityRadar: React.FC<LiquidityProximityRadarProps> = (
                 ACTIVE MONITOR
               </span>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate sm:whitespace-normal">
+            <p className="text-[10px] sm:text-[11px] text-slate-400 break-words leading-snug mt-0.5">
               Live distance tracking to key institutional liquidity pools (PDH/PDL & FVG CE).
             </p>
           </div>

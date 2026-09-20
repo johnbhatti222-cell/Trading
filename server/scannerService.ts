@@ -175,6 +175,31 @@ async function scanInstrument(
       return null;
     }
 
+    // Strict Institutional Filter: Prevent counter-trend alerts during active Breakout / Breakdown (BOS)
+    if (
+      candleData?.recentSweep === "BULLISH_BOS" ||
+      (candleData?.isBreakout && candleData?.breakoutType === "BULLISH_BOS")
+    ) {
+      if (direction === "BEARISH" || analysis.tradePlan?.direction === "SHORT") {
+        console.warn(
+          `[Scanner] Blocked contradictory Short alert for ${symbol} during active Bullish Break of Structure (BOS).`
+        );
+        return null;
+      }
+    }
+
+    if (
+      candleData?.recentSweep === "BEARISH_BOS" ||
+      (candleData?.isBreakout && candleData?.breakoutType === "BEARISH_BOS")
+    ) {
+      if (direction === "BULLISH" || analysis.tradePlan?.direction === "LONG") {
+        console.warn(
+          `[Scanner] Blocked contradictory Long alert for ${symbol} during active Bearish Breakdown (BOS).`
+        );
+        return null;
+      }
+    }
+
     // Check cooldown to avoid spamming the same setup repeatedly
     const lastAlertTime = instrumentAlertCooldowns.get(symbol) || 0;
     const cooldownMs = (scannerConfig.cooldownMinutes || 15) * 60 * 1000;

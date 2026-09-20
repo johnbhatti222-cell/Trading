@@ -511,6 +511,9 @@ export async function fetchLiveMarketPulse(): Promise<LiveMarketPulse> {
     },
   ];
 
+  // Enrich tickers with real-time institutional Snipe Execution status
+  await enrichTickersWithExecutionStatus(tickers);
+
   const pulse: LiveMarketPulse = {
     timestamp: new Date().toISOString(),
     session,
@@ -589,6 +592,91 @@ export async function fetchLiveMarketPulse(): Promise<LiveMarketPulse> {
 
   pulseCache = { data: pulse, timestamp: now };
   return pulse;
+}
+
+// Enrich tickers with real-time Snipe Execution Authorization status
+export async function enrichTickersWithExecutionStatus(tickers: MarketTicker[]): Promise<void> {
+  await Promise.allSettled(
+    tickers.map(async (t) => {
+      if (t.symbol === "DXY" || t.category === "MACRO") {
+        return;
+      }
+
+      // 1. Verify institutional market hours
+      const marketStatus = isMarketOpen(t.symbol);
+      if (!marketStatus.isOpen) {
+        t.isAuthorized = false;
+        t.executionStatus = "MARKET CLOSED";
+        t.statusText = "Market Closed";
+        t.decision = "MARKET CLOSED";
+        t.score = 0;
+        t.setupType = marketStatus.reason;
+        return;
+      }
+
+      // 2. Check live analysis cache
+      const cacheKey = `${t.symbol.toUpperCase()}-15M`;
+      const cached = liveAnalysisCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < 120000) {
+        const isAuth = cached.data.decision === "TRADE" && (cached.data.score?.totalScore ?? 0) >= 75;
+        t.isAuthorized = isAuth;
+        t.executionStatus = isAuth ? "AUTHORIZED" : "NOT AUTHORIZED";
+        t.statusText = isAuth ? "Authorized" : "Not Authorized";
+        t.decision = cached.data.decision;
+        t.score = cached.data.score?.totalScore ?? (isAuth ? 86 : 68);
+        t.setupType = cached.data.setup?.setupType || (isAuth ? "A+ Institutional Setup" : "Range Consolidation");
+        return;
+      }
+
+      // 3. Inspect real-time 15m candle structure for active liquidity sweep & displacement
+      try {
+        const candleData = await fetchLiveCandles(t.symbol, "15m", 25);
+        if (candleData.recentSweep === "BULLISH_BOS") {
+          t.isAuthorized = true;
+          t.executionStatus = "AUTHORIZED";
+          t.statusText = "Authorized";
+          t.decision = "TRADE";
+          t.score = 86;
+          t.setupType = "Bullish BOS Breakout (Long)";
+        } else if (candleData.recentSweep === "BEARISH_BOS") {
+          t.isAuthorized = true;
+          t.executionStatus = "AUTHORIZED";
+          t.statusText = "Authorized";
+          t.decision = "TRADE";
+          t.score = 86;
+          t.setupType = "Bearish BOS Breakdown (Short)";
+        } else if (candleData.recentSweep === "BSL_SWEPT") {
+          t.isAuthorized = true;
+          t.executionStatus = "AUTHORIZED";
+          t.statusText = "Authorized";
+          t.decision = "TRADE";
+          t.score = 86;
+          t.setupType = "BSL Raid (Bearish Reversal)";
+        } else if (candleData.recentSweep === "SSL_SWEPT") {
+          t.isAuthorized = true;
+          t.executionStatus = "AUTHORIZED";
+          t.statusText = "Authorized";
+          t.decision = "TRADE";
+          t.score = 88;
+          t.setupType = "SSL Sweep (Bullish Reversal)";
+        } else {
+          t.isAuthorized = false;
+          t.executionStatus = "NOT AUTHORIZED";
+          t.statusText = "Not Authorized";
+          t.decision = "WAIT";
+          t.score = 68;
+          t.setupType = "Awaiting Liquidity Sweep / BOS";
+        }
+      } catch (e) {
+        t.isAuthorized = false;
+        t.executionStatus = "NOT AUTHORIZED";
+        t.statusText = "Not Authorized";
+        t.decision = "WAIT";
+        t.score = 65;
+        t.setupType = "Internal Range";
+      }
+    })
+  );
 }
 
 const SENTIMENT_CACHE_TTL_MS = 15000; // 15s cache to protect public APIs
@@ -883,9 +971,10 @@ export function computeSmcMetrics(
   const currentPrice = candles[candles.length - 1].close;
 
   // Institutional SMC Engine:
-  // 1. Identify Swing Highs and Swing Lows (using 3-candle fractal window)
-  const swingHighs: number[] = [];
-  const swingLows: number[] = [];
+  // 1. Identify Prior Structural Swing Highs and Swing Lows (Resistance and Support)
+  // We identify pre-existing key fractal levels formed prior to the latest active candles
+  const priorSwingHighs: { idx: number; high: number }[] = [];
+  const priorSwingLows: { idx: number; low: number }[] = [];
 
   for (let i = 2; i < candles.length - 2; i++) {
     const c = candles[i];
@@ -894,38 +983,20 @@ export function computeSmcMetrics(
     const next1 = candles[i + 1];
     const next2 = candles[i + 2];
 
-    if (c.high > prev1.high && c.high > prev2.high && c.high > next1.high && c.high > next2.high) {
-      swingHighs.push(c.high);
+    if (c.high >= prev1.high && c.high >= prev2.high && c.high >= next1.high && c.high >= next2.high) {
+      priorSwingHighs.push({ idx: i, high: c.high });
     }
-    if (c.low < prev1.low && c.low < prev2.low && c.low < next1.low && c.low < next2.low) {
-      swingLows.push(c.low);
-    }
-  }
-
-  const bsl = swingHighs.length > 0 ? Math.max(...swingHighs) : high24h;
-  const ssl = swingLows.length > 0 ? Math.min(...swingLows) : low24h;
-
-  // 2. Detect Liquidity Sweeps
-  // A sweep occurs when a recent candle's wick breaks above BSL (or below SSL) but the body closes back inside.
-  let recentSweep: "BSL_SWEPT" | "SSL_SWEPT" | "NONE" = "NONE";
-  let sweepDetail: string | undefined = undefined;
-
-  // Check the last 4 candles
-  const checkSlice = candles.slice(-4);
-  for (let i = 0; i < checkSlice.length; i++) {
-    const c = checkSlice[i];
-    if (c.high > bsl * 0.9998 && c.close < bsl) {
-      c.isSweep = true;
-      recentSweep = "BSL_SWEPT";
-      sweepDetail = `Buy-Side Liquidity (BSL) swept at ${formatPrice(bsl)} with upper rejection wick.`;
-    } else if (c.low < ssl * 1.0002 && c.close > ssl) {
-      c.isSweep = true;
-      recentSweep = "SSL_SWEPT";
-      sweepDetail = `Sell-Side Liquidity (SSL) swept at ${formatPrice(ssl)} with lower rejection wick.`;
+    if (c.low <= prev1.low && c.low <= prev2.low && c.low <= next1.low && c.low <= next2.low) {
+      priorSwingLows.push({ idx: i, low: c.low });
     }
   }
 
-  // 3. Detect Displacement & Fair Value Gaps (FVG)
+  const allHistoricalHighs = priorSwingHighs.map((x) => x.high);
+  const allHistoricalLows = priorSwingLows.map((x) => x.low);
+  const bsl = allHistoricalHighs.length > 0 ? Math.max(...allHistoricalHighs) : high24h;
+  const ssl = allHistoricalLows.length > 0 ? Math.min(...allHistoricalLows) : low24h;
+
+  // 2. Detect Displacement & Fair Value Gaps (FVG)
   const avgBody =
     candles.reduce((acc, c) => acc + Math.abs(c.close - c.open), 0) / Math.max(1, candles.length);
 
@@ -937,7 +1008,7 @@ export function computeSmcMetrics(
     const prev2 = candles[i - 2];
 
     const body = Math.abs(c.close - c.open);
-    if (body > avgBody * 1.9) {
+    if (body > avgBody * 1.5) {
       c.isDisplacement = true;
     }
 
@@ -962,16 +1033,102 @@ export function computeSmcMetrics(
     }
   }
 
-  // 4. Detect Break of Structure (BOS)
-  for (let i = 3; i < candles.length; i++) {
-    const c = candles[i];
-    const priorHigh = Math.max(...candles.slice(Math.max(0, i - 6), i).map((x) => x.high));
-    const priorLow = Math.min(...candles.slice(Math.max(0, i - 6), i).map((x) => x.low));
+  // 3. Detect Breakout (BOS) vs. Liquidity Sweeps (Reversal/Fakeout)
+  let recentSweep: "BSL_SWEPT" | "SSL_SWEPT" | "BULLISH_BOS" | "BEARISH_BOS" | "NONE" = "NONE";
+  let sweepDetail: string | undefined = undefined;
+  let isBreakout: boolean = false;
+  let breakoutLevel: number | undefined = undefined;
+  let breakoutType: "BULLISH_BOS" | "BEARISH_BOS" | undefined = undefined;
 
-    if (c.close > priorHigh && c.isDisplacement) {
-      c.isBOS = true;
-    } else if (c.close < priorLow && c.isDisplacement) {
-      c.isBOS = true;
+  const recentSlice = candles.slice(-6);
+
+  // A. Check for BULLISH BREAKOUT / BREAK OF STRUCTURE (BOS):
+  // Check if candle bodies closed ABOVE prior resistance/swing highs with displacement
+  let detectedBullishBreakoutLevel: number | null = null;
+  let bullishClosesCount = 0;
+
+  for (const sh of priorSwingHighs) {
+    const closesAbove = recentSlice.filter((c) => c.close > sh.high && c.close >= c.open);
+    if (closesAbove.length > 0 && currentPrice >= sh.high * 0.9985) {
+      if (!detectedBullishBreakoutLevel || sh.high > detectedBullishBreakoutLevel) {
+        detectedBullishBreakoutLevel = sh.high;
+        bullishClosesCount = closesAbove.length;
+      }
+    }
+  }
+
+  // Also check if current price is breaking out above 24h high or has 3+ consecutive bullish expansion candles
+  const consecutiveBullish = recentSlice.slice(-4).filter((c) => c.close > c.open).length >= 3;
+  if (!detectedBullishBreakoutLevel && currentPrice >= bsl * 0.9995 && consecutiveBullish) {
+    detectedBullishBreakoutLevel = bsl;
+    bullishClosesCount = 3;
+  }
+
+  // B. Check for BEARISH BREAKDOWN / BREAK OF STRUCTURE (BOS):
+  let detectedBearishBreakdownLevel: number | null = null;
+  let bearishClosesCount = 0;
+
+  for (const sl of priorSwingLows) {
+    const closesBelow = recentSlice.filter((c) => c.close < sl.low && c.close <= c.open);
+    if (closesBelow.length > 0 && currentPrice <= sl.low * 1.0015) {
+      if (!detectedBearishBreakdownLevel || sl.low < detectedBearishBreakdownLevel) {
+        detectedBearishBreakdownLevel = sl.low;
+        bearishClosesCount = closesBelow.length;
+      }
+    }
+  }
+
+  if (detectedBullishBreakoutLevel !== null) {
+    // Confirmed Bullish Breakout
+    recentSweep = "BULLISH_BOS";
+    isBreakout = true;
+    breakoutLevel = detectedBullishBreakoutLevel;
+    breakoutType = "BULLISH_BOS";
+    sweepDetail = `Bullish Break of Structure (BOS): Price broke out and closed above key resistance at $${formatPrice(detectedBullishBreakoutLevel, 2)} with ${bullishClosesCount} confirmed bullish closes. Active expansion higher (SHORT ENTRIES ARE STRICTLY FORBIDDEN).`;
+
+    // Tag breakout candles
+    recentSlice.forEach((c) => {
+      if (c.close > detectedBullishBreakoutLevel!) {
+        c.isBOS = true;
+      }
+    });
+  } else if (detectedBearishBreakdownLevel !== null) {
+    // Confirmed Bearish Breakdown
+    recentSweep = "BEARISH_BOS";
+    isBreakout = true;
+    breakoutLevel = detectedBearishBreakdownLevel;
+    breakoutType = "BEARISH_BOS";
+    sweepDetail = `Bearish Breakdown (BOS): Price broke down and closed below key support at $${formatPrice(detectedBearishBreakdownLevel, 2)} with ${bearishClosesCount} confirmed bearish closes. Active breakdown lower (LONG ENTRIES ARE STRICTLY FORBIDDEN).`;
+
+    recentSlice.forEach((c) => {
+      if (c.close < detectedBearishBreakdownLevel!) {
+        c.isBOS = true;
+      }
+    });
+  } else {
+    // C. No Breakout — Check for True Liquidity Sweeps (Reversal/Fakeout)
+    // ONLY check the last 3 candles, and ONLY if currentPrice remains INSIDE the range!
+    const checkSweepSlice = candles.slice(-3);
+    for (let i = 0; i < checkSweepSlice.length; i++) {
+      const c = checkSweepSlice[i];
+      const candleRange = Math.max(0.0001, c.high - c.low);
+      const upperWick = c.high - Math.max(c.open, c.close);
+      const lowerWick = Math.min(c.open, c.close) - c.low;
+
+      // BSL Sweep requires:
+      // 1. Wick took out the level (c.high > bsl)
+      // 2. Body failed to close above and closed back inside (c.close < bsl)
+      // 3. Upper rejection wick is dominant (>= 35% of total candle range)
+      // 4. Current price is still below BSL (currentPrice < bsl)
+      if (c.high > bsl && c.close < bsl && upperWick / candleRange >= 0.35 && currentPrice < bsl) {
+        c.isSweep = true;
+        recentSweep = "BSL_SWEPT";
+        sweepDetail = `Buy-Side Liquidity (BSL) swept at $${formatPrice(bsl, 2)} with prominent upper rejection wick. Re-entry inside range confirms reversal short setup.`;
+      } else if (c.low < ssl && c.close > ssl && lowerWick / candleRange >= 0.35 && currentPrice > ssl) {
+        c.isSweep = true;
+        recentSweep = "SSL_SWEPT";
+        sweepDetail = `Sell-Side Liquidity (SSL) swept at $${formatPrice(ssl, 2)} with prominent lower rejection wick. Re-entry inside range confirms reversal long setup.`;
+      }
     }
   }
 
@@ -991,6 +1148,9 @@ export function computeSmcMetrics(
     ssl,
     recentSweep,
     sweepDetail,
+    isBreakout,
+    breakoutLevel,
+    breakoutType,
     rsi: {
       value: rsiInfo.rsi,
       condition: rsiInfo.condition,
@@ -1275,6 +1435,8 @@ function sanitizeAnalysis(
   candleData: LiveCandlesResponse,
   timeframe: string
 ): TradeAnalysis {
+  const isBullishBos = candleData.recentSweep === "BULLISH_BOS";
+  const isBearishBos = candleData.recentSweep === "BEARISH_BOS";
   const isBslSwept = candleData.recentSweep === "BSL_SWEPT";
   const isSslSwept = candleData.recentSweep === "SSL_SWEPT";
 
@@ -1285,13 +1447,13 @@ function sanitizeAnalysis(
       instrument: typeof market === "string" && market.trim() ? market : symbol,
       currentPrice: currentPriceFormatted,
       session: pulse.session,
-      marketRegime: "RANGE" as MarketRegime,
+      marketRegime: (isBullishBos || isBearishBos ? "BREAKOUT" : "RANGE") as MarketRegime,
     };
   } else {
     market.instrument = symbol;
     market.currentPrice = currentPriceFormatted;
     if (!market.session) market.session = pulse.session;
-    if (!market.marketRegime) market.marketRegime = "RANGE";
+    if (!market.marketRegime) market.marketRegime = isBullishBos || isBearishBos ? "BREAKOUT" : "RANGE";
   }
 
   // 2. Score Breakdown
@@ -1333,17 +1495,17 @@ function sanitizeAnalysis(
       totalScore: Number(parsed.score.totalScore) || (htf + liq + ms + disp + vol + macro + sess + rr + reg),
     };
   } else {
-    const defaultScore = isBslSwept || isSslSwept ? 86 : 68;
+    const defaultScore = isBullishBos || isBearishBos || isBslSwept || isSslSwept ? 86 : 68;
     score = {
-      htfStructure: isBslSwept || isSslSwept ? 18 : 12,
-      liquidityAlignment: isBslSwept || isSslSwept ? 19 : 10,
-      marketStructureConfirmation: isBslSwept || isSslSwept ? 13 : 8,
-      displacementMomentum: isBslSwept || isSslSwept ? 9 : 6,
-      volumeOrderFlow: isBslSwept || isSslSwept ? 8 : 6,
+      htfStructure: isBullishBos || isBearishBos || isBslSwept || isSslSwept ? 18 : 12,
+      liquidityAlignment: isBullishBos || isBearishBos || isBslSwept || isSslSwept ? 19 : 10,
+      marketStructureConfirmation: isBullishBos || isBearishBos || isBslSwept || isSslSwept ? 13 : 8,
+      displacementMomentum: isBullishBos || isBearishBos || isBslSwept || isSslSwept ? 9 : 6,
+      volumeOrderFlow: isBullishBos || isBearishBos || isBslSwept || isSslSwept ? 8 : 6,
       macroEnvironment: 8,
       sessionTiming: 4,
-      riskReward: isBslSwept || isSslSwept ? 4 : 2,
-      regimeAlignment: isBslSwept || isSslSwept ? 5 : 4,
+      riskReward: isBullishBos || isBearishBos || isBslSwept || isSslSwept ? 4 : 2,
+      regimeAlignment: isBullishBos || isBearishBos || isBslSwept || isSslSwept ? 5 : 4,
       totalScore: defaultScore,
     };
   }
@@ -1358,9 +1520,19 @@ function sanitizeAnalysis(
   let bias = parsed?.bias;
   if (!bias || typeof bias !== "object") {
     bias = {
-      direction: isBslSwept ? "BEARISH" : isSslSwept ? "BULLISH" : "NEUTRAL",
+      direction: isBullishBos ? "BULLISH" : isBearishBos ? "BEARISH" : isBslSwept ? "BEARISH" : isSslSwept ? "BULLISH" : "NEUTRAL",
       confidence: score.totalScore,
     };
+  }
+
+  // STRICT ICT RULE OVERRIDE:
+  // If market confirmed a BULLISH Break of Structure (BOS), direction CANNOT be Bearish or Short!
+  if (isBullishBos && bias.direction !== "BULLISH") {
+    bias.direction = "BULLISH";
+    bias.confidence = Math.max(85, score.totalScore);
+  } else if (isBearishBos && bias.direction !== "BEARISH") {
+    bias.direction = "BEARISH";
+    bias.confidence = Math.max(85, score.totalScore);
   }
 
   // 5. Structure
@@ -1379,12 +1551,20 @@ function sanitizeAnalysis(
     liquidity = {
       buySideLiquidity: `$${formatPrice(candleData.bsl, 2)}`,
       sellSideLiquidity: `$${formatPrice(candleData.ssl, 2)}`,
-      liquidityAlreadySwept: isBslSwept
+      liquidityAlreadySwept: isBullishBos
+        ? `Resistance broken at $${formatPrice(candleData.breakoutLevel || candleData.bsl, 2)} (BOS)`
+        : isBearishBos
+        ? `Support broken at $${formatPrice(candleData.breakoutLevel || candleData.ssl, 2)} (BOS)`
+        : isBslSwept
         ? `BSL at $${formatPrice(candleData.bsl, 2)}`
         : isSslSwept
         ? `SSL at $${formatPrice(candleData.ssl, 2)}`
         : "None confirmed recently",
-      nextLikelyLiquidityTarget: isBslSwept
+      nextLikelyLiquidityTarget: isBullishBos
+        ? `$${formatPrice(candleData.high24h * 1.015, 2)} (HTF Expansion High)`
+        : isBearishBos
+        ? `$${formatPrice(candleData.low24h * 0.985, 2)} (HTF Expansion Low)`
+        : isBslSwept
         ? `$${formatPrice(candleData.ssl, 2)}`
         : `$${formatPrice(candleData.bsl, 2)}`,
     };
@@ -1392,40 +1572,69 @@ function sanitizeAnalysis(
 
   // 7. Setup
   let setup = parsed?.setup;
-  if (!setup || typeof setup !== "object") {
+  if (!setup || typeof setup !== "object" || (isBullishBos && setup?.setupType?.toLowerCase().includes("short"))) {
     setup = {
-      setupType: isBslSwept
+      setupType: isBullishBos
+        ? "Bullish BOS Breakout + Order Block Retest"
+        : isBearishBos
+        ? "Bearish BOS Breakdown + Breaker Retest"
+        : isBslSwept
         ? "BSL Raid + Bearish Reversal"
         : isSslSwept
         ? "SSL Liquidity Run + Bullish Order Block"
         : "Range Compression / Awaiting Liquidity Expansion",
-      whyExists: isBslSwept
+      whyExists: isBullishBos
+        ? "Price broke out above key structural resistance with bullish displacement. Expansion regime active."
+        : isBearishBos
+        ? "Price broke down below key structural support with bearish displacement. Distribution active."
+        : isBslSwept
         ? "Late breakout longs trapped above previous high liquidated."
         : isSslSwept
         ? "Stop runs triggered below swing lows into institutional bids."
         : "Price building liquidity resting above/below active session range.",
       confirmationRequired:
         decision === "TRADE"
-          ? "Maintain structure shift on lower timeframe without violating invalidation level."
+          ? isBullishBos
+            ? "Retest of broken resistance level or bullish FVG holding without closing back below breakout base."
+            : "Maintain structure shift on lower timeframe without violating invalidation level."
           : `Wait for price to tap BSL or SSL and show clear rejection wick.`,
     };
   }
 
   // 8. Trade Plan
   let tradePlan = parsed?.tradePlan;
-  if (!tradePlan || typeof tradePlan !== "object") {
+  if (!tradePlan || typeof tradePlan !== "object" || (isBullishBos && tradePlan?.direction === "SHORT")) {
+    const breakoutRef = candleData.breakoutLevel || candleData.bsl;
     tradePlan = {
-      direction: isBslSwept ? "SHORT" : isSslSwept ? "LONG" : "NONE",
-      entryZone: `$${formatPrice(candleData.currentPrice, 2)}`,
-      stopLoss: isBslSwept
+      direction: isBullishBos ? "LONG" : isBearishBos ? "SHORT" : isBslSwept ? "SHORT" : isSslSwept ? "LONG" : "NONE",
+      entryZone: isBullishBos
+        ? `$${formatPrice(breakoutRef, 2)} – $${formatPrice(candleData.currentPrice, 2)} (Retest of Breaker Block / Bullish FVG)`
+        : isBearishBos
+        ? `$${formatPrice(candleData.currentPrice, 2)} – $${formatPrice(candleData.breakoutLevel || candleData.ssl, 2)}`
+        : `$${formatPrice(candleData.currentPrice, 2)}`,
+      stopLoss: isBullishBos
+        ? `$${formatPrice(candleData.ssl, 2)} (Structural Invalidation below breakout base)`
+        : isBearishBos
+        ? `$${formatPrice(candleData.bsl, 2)} (Structural Invalidation above breakdown base)`
+        : isBslSwept
         ? `$${formatPrice(candleData.bsl * 1.002, 2)}`
         : isSslSwept
         ? `$${formatPrice(candleData.ssl * 0.998, 2)}`
         : "Undefined until sweep confirmed",
-      tp1: `$${formatPrice(candleData.currentPrice * (isBslSwept ? 0.995 : 1.005), 2)}`,
-      tp2: isBslSwept ? `$${formatPrice(candleData.ssl, 2)}` : `$${formatPrice(candleData.bsl, 2)}`,
-      tp3: `$${formatPrice(candleData.low24h, 2)}`,
-      riskReward: isBslSwept || isSslSwept ? "1:2.8" : "N/A",
+      tp1: isBullishBos
+        ? `$${formatPrice(candleData.currentPrice * 1.012, 2)} (Next HTF Liquidity)`
+        : isBearishBos
+        ? `$${formatPrice(candleData.currentPrice * 0.988, 2)}`
+        : `$${formatPrice(candleData.currentPrice * (isBslSwept ? 0.995 : 1.005), 2)}`,
+      tp2: isBullishBos
+        ? `$${formatPrice(candleData.currentPrice * 1.025, 2)} (Major HTF Expansion High)`
+        : isBearishBos
+        ? `$${formatPrice(candleData.currentPrice * 0.975, 2)}`
+        : isBslSwept ? `$${formatPrice(candleData.ssl, 2)}` : `$${formatPrice(candleData.bsl, 2)}`,
+      tp3: isBullishBos
+        ? `$${formatPrice(candleData.currentPrice * 1.04, 2)}`
+        : `$${formatPrice(candleData.low24h, 2)}`,
+      riskReward: isBullishBos || isBearishBos || isBslSwept || isSslSwept ? "1:2.8" : "N/A",
     };
   }
 
@@ -1471,14 +1680,20 @@ ${parsed?.decisionReason || ""}`,
 export async function evaluateLiveMarketSetup(
   symbol: string,
   timeframe: string = "15M",
-  ai: GoogleGenAI | null
+  ai: GoogleGenAI | null,
+  forceRefresh: boolean = false
 ): Promise<TradeAnalysis> {
   const cacheKey = `${symbol.toUpperCase()}-${timeframe.toUpperCase()}`;
   const now = Date.now();
   const cached = liveAnalysisCache.get(cacheKey);
 
-  // Return cached live evaluation if less than 60 seconds old to protect quota
-  if (cached && now - cached.timestamp < 60000) {
+  // Return cached live evaluation if less than 12 seconds old to protect quota, unless forceRefresh is true
+  if (cached && !forceRefresh && now - cached.timestamp < 12000) {
+    const latestPrice = getCachedTickerPrice(symbol);
+    if (latestPrice) {
+      cached.data.market.currentPrice = latestPrice;
+      cached.data.timestamp = new Date().toISOString();
+    }
     return cached.data;
   }
 
@@ -1508,7 +1723,8 @@ Real-Time Candlestick Context (Last 30 candles):
 - Calculated Buy-Side Liquidity (BSL): ${bslFormatted}
 - Calculated Sell-Side Liquidity (SSL): ${sslFormatted}
 - 14-Period RSI Indicator: ${candleData.rsi?.value || 50.0} (${candleData.rsi?.condition || "Neutral Equilibrium"})
-- Detected Liquidity Sweep Status: ${candleData.recentSweep} (${candleData.sweepDetail || "No fresh sweep confirmed"})
+- Detected Market Structure Status: ${candleData.recentSweep} (${candleData.sweepDetail || "No fresh sweep or breakout confirmed"})
+- Breakout Detected: ${candleData.isBreakout ? `YES (${candleData.breakoutType} at $${formatPrice(candleData.breakoutLevel || 0, 2)})` : "NO"}
 - Active Fair Value Gaps (FVG): ${JSON.stringify(candleData.activeFvgs)}
 
 Macro Environment:
@@ -1518,9 +1734,11 @@ Macro Environment:
 ${pulse.macro.btcFundingRate ? `- BTC Funding Rate: ${pulse.macro.btcFundingRate.value} (${pulse.macro.btcFundingRate.sentiment})` : ""}
 ${pulse.macro.btcOpenInterest ? `- BTC Open Interest: ${pulse.macro.btcOpenInterest.value} (${pulse.macro.btcOpenInterest.usdValue})` : ""}
 
-Evaluate this actual LIVE market state using the Master Trading Analyst institutional rules:
-- Strictly enforce the hierarchy: HTF Structure → Liquidity → Market Regime → Displacement → LTF Structure → Entry → Risk
-- If price is in the middle of a range without a confirmed liquidity sweep or clear invalidation, return WAIT or NO TRADE!
+CRITICAL INSTITUTIONAL DISCIPLINE - BREAKOUT (BOS) VS. LIQUIDITY SWEEP:
+- When price breaks out and candle bodies close firmly above key resistance/BSL (e.g. 80,600 and 80,864), this is a confirmed BULLISH BREAK OF STRUCTURE (BOS).
+- Under a BULLISH BOS, the bias is STRICTLY BULLISH (expansion higher). Calling a SHORT or BEARISH reversal during a confirmed bullish breakout is a fatal error. SHORT IS STRICTLY FORBIDDEN.
+- Conversely, a True BSL Sweep (Short Reversal) ONLY occurs when price pierces above resistance with a long upper wick (>=35% of candle range) and candle body closes back below resistance, and current price is below resistance.
+- If price is in the middle of a range without a confirmed sweep or breakout, return WAIT or NO TRADE!
 - If score < 65 or an unresolved conflict exists, return NO TRADE.
 - Output strictly valid JSON matching the TradeAnalysis schema.
 `;
@@ -1564,14 +1782,16 @@ Evaluate this actual LIVE market state using the Master Trading Analyst institut
   }
 
   // Institutional Algorithmic Fallback Engine (computes exact SMC rules directly from real candle math)
+  const isBullishBos = candleData.recentSweep === "BULLISH_BOS";
+  const isBearishBos = candleData.recentSweep === "BEARISH_BOS";
   const isBslSwept = candleData.recentSweep === "BSL_SWEPT";
   const isSslSwept = candleData.recentSweep === "SSL_SWEPT";
 
   let decision: "TRADE" | "WAIT" | "NO TRADE" = "WAIT";
-  let decisionReason = "Price is currently digesting liquidity within the range. Awaiting clean sweep and displacement.";
+  let decisionReason = "Price is currently digesting liquidity within the range. Awaiting clean sweep or breakout confirmation.";
   let marketRegime: MarketRegime = "RANGE";
   let direction: "LONG" | "SHORT" | "NONE" = "NONE";
-  let entryZone = "Awaiting liquidity grab";
+  let entryZone = "Awaiting liquidity grab or breakout retest";
   let stopLoss = pdhFormatted;
   let tp1 = sslFormatted;
   let tp2 = `$${formatPrice(candleData.low24h, 2)}`;
@@ -1579,7 +1799,33 @@ Evaluate this actual LIVE market state using the Master Trading Analyst institut
   let riskReward = "1:2.4";
   let scoreTotal = 72;
 
-  if (isBslSwept) {
+  if (isBullishBos) {
+    // High probability Long Setup (Breakout & Retest of Breaker Block)
+    direction = "LONG";
+    marketRegime = "BREAKOUT";
+    scoreTotal = 88;
+    decision = "TRADE";
+    decisionReason = `A+ Institutional Breakout: Price confirmed Bullish Break of Structure (BOS) above resistance at $${formatPrice(candleData.breakoutLevel || candleData.bsl, 2)} with confirmed displacement. Market is in active bullish expansion (DO NOT SHORT). High probability long entries found on retest of the broken level / breaker block.`;
+    entryZone = `$${formatPrice(candleData.breakoutLevel || candleData.bsl, 2)} – $${formatPrice(candleData.currentPrice, 2)} (Retest of Breaker Block / Bullish FVG)`;
+    stopLoss = `$${formatPrice(candleData.ssl, 2)} (Structural Invalidation below breakout base)`;
+    tp1 = `$${formatPrice(candleData.currentPrice * 1.012, 2)} (Next HTF Liquidity Pool)`;
+    tp2 = `$${formatPrice(candleData.currentPrice * 1.025, 2)} (Major HTF Expansion High)`;
+    tp3 = `$${formatPrice(candleData.currentPrice * 1.04, 2)}`;
+    riskReward = "1:2.8";
+  } else if (isBearishBos) {
+    // High probability Short Setup (Breakdown & Retest)
+    direction = "SHORT";
+    marketRegime = "BREAKOUT";
+    scoreTotal = 88;
+    decision = "TRADE";
+    decisionReason = `A+ Institutional Breakdown: Price confirmed Bearish Break of Structure (BOS) below support at $${formatPrice(candleData.breakoutLevel || candleData.ssl, 2)} with confirmed displacement. Market is in active bearish expansion (DO NOT LONG). Favorable short entries found on retest of broken support.`;
+    entryZone = `$${formatPrice(candleData.currentPrice, 2)} – $${formatPrice(candleData.breakoutLevel || candleData.ssl, 2)}`;
+    stopLoss = `$${formatPrice(candleData.bsl, 2)} (Structural Invalidation above breakdown base)`;
+    tp1 = `$${formatPrice(candleData.currentPrice * 0.988, 2)} (Next HTF Sell-Side Target)`;
+    tp2 = `$${formatPrice(candleData.currentPrice * 0.975, 2)}`;
+    tp3 = `$${formatPrice(candleData.low24h, 2)}`;
+    riskReward = "1:2.8";
+  } else if (isBslSwept) {
     // High probability Short Setup (Reversal after BSL raid)
     direction = "SHORT";
     marketRegime = "DISTRIBUTION";
@@ -1606,13 +1852,13 @@ Evaluate this actual LIVE market state using the Master Trading Analyst institut
     tp3 = pdhFormatted;
     riskReward = "1:3.1";
   } else {
-    // No sweep yet -> Discipline requires WAIT or NO TRADE
+    // No sweep or breakout yet -> Discipline requires WAIT or NO TRADE
     scoreTotal = 68;
     decision = "WAIT";
-    decisionReason = `No confirmed liquidity sweep on ${timeframe}. Price is trading between BSL (${bslFormatted}) and SSL (${sslFormatted}). Master Analyst rule: Entering before liquidity extraction is chasing. Wait for sweep.`;
+    decisionReason = `No confirmed liquidity sweep or breakout on ${timeframe}. Price is trading between BSL (${bslFormatted}) and SSL (${sslFormatted}). Master Analyst rule: Entering before liquidity extraction or breakout confirmation is chasing. Wait for setup.`;
     marketRegime = "RANGE";
     direction = "NONE";
-    entryZone = `Monitor BSL (${bslFormatted}) or SSL (${sslFormatted}) for raid`;
+    entryZone = `Monitor BSL (${bslFormatted}) or SSL (${sslFormatted}) for raid or breakout`;
     stopLoss = "Undefined until sweep confirmed";
     tp1 = "N/A";
     tp2 = "N/A";
@@ -1643,27 +1889,47 @@ Evaluate this actual LIVE market state using the Master Trading Analyst institut
     liquidity: {
       buySideLiquidity: bslFormatted,
       sellSideLiquidity: sslFormatted,
-      liquidityAlreadySwept: isBslSwept
+      liquidityAlreadySwept: isBullishBos
+        ? `Resistance broken at $${formatPrice(candleData.breakoutLevel || candleData.bsl, 2)} (BOS)`
+        : isBearishBos
+        ? `Support broken at $${formatPrice(candleData.breakoutLevel || candleData.ssl, 2)} (BOS)`
+        : isBslSwept
         ? `BSL at ${bslFormatted}`
         : isSslSwept
         ? `SSL at ${sslFormatted}`
         : "None confirmed recently",
-      nextLikelyLiquidityTarget: isBslSwept ? sslFormatted : bslFormatted,
+      nextLikelyLiquidityTarget: isBullishBos
+        ? `$${formatPrice(candleData.high24h * 1.015, 2)} (HTF Expansion High)`
+        : isBearishBos
+        ? `$${formatPrice(candleData.low24h * 0.985, 2)} (HTF Expansion Low)`
+        : isBslSwept
+        ? sslFormatted
+        : bslFormatted,
     },
     setup: {
-      setupType: isBslSwept
+      setupType: isBullishBos
+        ? "Bullish BOS Breakout + Breaker Retest"
+        : isBearishBos
+        ? "Bearish BOS Breakdown + Breaker Retest"
+        : isBslSwept
         ? "BSL Raid + Bearish Displacement Reversal"
         : isSslSwept
         ? "SSL Liquidity Run + Bullish Structure Shift"
         : "Range Compression / Awaiting Liquidity Run",
-      whyExists: isBslSwept
+      whyExists: isBullishBos
+        ? "Price broke out above key structural resistance with bullish displacement. Active expansion higher."
+        : isBearishBos
+        ? "Price broke down below key structural support with bearish displacement. Active distribution lower."
+        : isBslSwept
         ? "Late breakout buyers trapped at previous highs; institutional sell orders triggered."
         : isSslSwept
         ? "Stop losses triggered below swing lows into institutional bid liquidity."
         : "Price is building liquidity above and below current trading range before directional expansion.",
       confirmationRequired:
         decision === "TRADE"
-          ? "Maintain structure shift on lower timeframe without violating invalidation level."
+          ? isBullishBos
+            ? "Retest of broken resistance level or bullish FVG holding without closing back below breakout base."
+            : "Maintain structure shift on lower timeframe without violating invalidation level."
           : `Wait for price to tap ${bslFormatted} or ${sslFormatted} and show clear rejection wick.`,
     },
     tradePlan: {

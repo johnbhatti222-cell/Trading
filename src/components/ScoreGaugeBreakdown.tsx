@@ -118,8 +118,8 @@ export const ScoreGaugeBreakdown: React.FC<ScoreGaugeBreakdownProps> = ({
               key={i}
               className="bg-slate-900/50 border border-slate-800/60 rounded-lg p-2.5 flex flex-col justify-between"
             >
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-xs font-medium text-slate-300 font-mono truncate">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <span className="text-xs font-medium text-slate-200 font-mono leading-snug break-words">
                   {f.label}
                 </span>
                 <span className="text-xs font-bold font-mono text-white flex-shrink-0">
@@ -135,7 +135,7 @@ export const ScoreGaugeBreakdown: React.FC<ScoreGaugeBreakdownProps> = ({
                   style={{ width: `${pct}%` }}
                 />
               </div>
-              <div className="text-[10px] text-slate-400 truncate">
+              <div className="text-[10px] text-slate-400 font-mono leading-tight break-words mt-0.5">
                 {f.weightDesc}
               </div>
             </div>

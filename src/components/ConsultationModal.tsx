@@ -105,7 +105,7 @@ Ask me anything about this thesis:
                   {analysis.market.instrument}
                 </span>
               </h3>
-              <p className="text-[11px] sm:text-xs text-slate-400 font-mono truncate sm:whitespace-normal">
+              <p className="text-[11px] sm:text-xs text-slate-400 font-mono break-words leading-snug">
                 Objective risk interrogation & discipline check
               </p>
             </div>

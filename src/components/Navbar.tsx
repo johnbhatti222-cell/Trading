@@ -15,11 +15,12 @@ import {
   RotateCw,
   RotateCcw,
   Radar,
+  LineChart,
 } from "lucide-react";
 
 interface NavbarProps {
-  activeTab: "evaluator" | "journal" | "checklist" | "macro" | "replay";
-  setActiveTab: (tab: "evaluator" | "journal" | "checklist" | "macro" | "replay") => void;
+  activeTab: "evaluator" | "journal" | "checklist" | "macro" | "replay" | "backtest";
+  setActiveTab: (tab: "evaluator" | "journal" | "checklist" | "macro" | "replay" | "backtest") => void;
   onOpenScreenshotModal: () => void;
   onOpenScannerModal?: () => void;
 }
@@ -228,6 +229,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <RotateCcw size={13} />
             <span>Tape Replay</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("backtest")}
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap flex-shrink-0 ${
+              activeTab === "backtest"
+                ? "bg-indigo-600 text-white shadow-md"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            }`}
+          >
+            <LineChart size={13} />
+            <span>Strategy Backtest</span>
           </button>
         </div>
 

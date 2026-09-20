@@ -19,7 +19,8 @@ import {
   startBackgroundScanner,
   registerTelegramSender,
 } from "./server/scannerService";
-import { TradeAnalysis, DecisionType, MarketRegime } from "./src/types";
+import { runStrategyBacktest, BACKTEST_PRESETS } from "./server/backtestService";
+import { TradeAnalysis, DecisionType, MarketRegime, BacktestParams } from "./src/types";
 
 dotenv.config();
 
@@ -331,9 +332,10 @@ app.post("/api/analyze-live", async (req, res) => {
   try {
     const symbol = (req.body.symbol as string) || "XAU/USD";
     const timeframe = (req.body.timeframe as string) || "15M";
+    const forceRefresh = Boolean(req.body.forceRefresh);
     const ai = getGeminiClient();
 
-    const analysis = await evaluateLiveMarketSetup(symbol, timeframe, ai);
+    const analysis = await evaluateLiveMarketSetup(symbol, timeframe, ai, forceRefresh);
     res.json(analysis);
   } catch (err: any) {
     console.error("Failed to evaluate live market setup:", err);
@@ -1018,6 +1020,40 @@ app.post("/api/scanner/scan-now", async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || "Scanner cycle execution failed" });
+  }
+});
+
+// Strategy Backtesting Engine: Get institutional presets
+app.get("/api/backtest/presets", (req, res) => {
+  res.json({ success: true, presets: BACKTEST_PRESETS });
+});
+
+// Strategy Backtesting Engine: Run historical 9-factor simulation
+app.post("/api/backtest/run", (req, res) => {
+  try {
+    const params: BacktestParams = {
+      instrument: req.body?.instrument || "BTC/USD",
+      timeframe: req.body?.timeframe || "15M",
+      period: req.body?.period || "6M",
+      thresholdScore: Number(req.body?.thresholdScore) || 80,
+      riskRewardRatio: Number(req.body?.riskRewardRatio) || 2.5,
+      tpStrategy: req.body?.tpStrategy || "TRAILING_BE",
+      sessionFilter: req.body?.sessionFilter || "KILLZONES_ONLY",
+      riskPerTradePct: Number(req.body?.riskPerTradePct) || 1.0,
+      initialBalance: Number(req.body?.initialBalance) || 10000,
+    };
+
+    const result = runStrategyBacktest(params);
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err: any) {
+    console.error("Backtest simulation failed:", err);
+    res.status(500).json({
+      success: false,
+      error: err.message || "Strategy backtest simulation failed",
+    });
   }
 });
 

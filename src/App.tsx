@@ -12,9 +12,10 @@ import { ScreenshotAnalysisModal } from "./components/ScreenshotAnalysisModal";
 import { KillzoneClocksHUD } from "./components/KillzoneClocksHUD";
 import { MarketSentimentTicker } from "./components/MarketSentimentTicker";
 import { MultiInstrumentScannerModal } from "./components/MultiInstrumentScannerModal";
+import { StrategyBacktester } from "./components/StrategyBacktester";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"evaluator" | "journal" | "checklist" | "macro" | "replay">("evaluator");
+  const [activeTab, setActiveTab] = useState<"evaluator" | "journal" | "checklist" | "macro" | "replay" | "backtest">("evaluator");
   const [currentAnalysis, setCurrentAnalysis] = useState<TradeAnalysis>(DEFAULT_ANALYSIS_GOLD);
   const [isConsultOpen, setIsConsultOpen] = useState(false);
   const [isScreenshotModalOpen, setIsScreenshotModalOpen] = useState(false);
@@ -149,6 +150,10 @@ export default function App() {
               onLogTradeToJournal={handleAddJournalRecord}
             />
           </div>
+        )}
+
+        {activeTab === "backtest" && (
+          <StrategyBacktester />
         )}
       </main>
 
